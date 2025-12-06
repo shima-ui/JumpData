@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yahoo ワード解析ダッシュボード</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans JP', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .controls {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.1em;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            margin-left: 10px;
+        }
+
+        .progress-container {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .progress-text {
+            color: #666;
+            font-size: 1.1em;
+            margin-top: 10px;
+        }
+
+        .results-container {
+            display: none;
+        }
+
+        .result-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .result-card:hover {
+            transform: translateY(-5px);
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .result-title {
+            font-size: 1.8em;
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .result-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            color: #333;
+            font-size: 1.3em;
+            font-weight: bold;
+        }
+
+        .result-query {
+            color: #666;
+            font-size: 0.95em;
+            font-style: italic;
+            margin-bottom: 20px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+
+        .result-plot {
+            width: 100%;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .chart-container {
+            position: relative;
+            height: 400px;
+            margin-top: 20px;
+        }
+
+        .summary-table {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: bold;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #ff6b6b;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .success {
+            background: #51cf66;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+
+        .query-editor {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .query-editor h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .query-list {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .query-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .query-item label {
+            display: block;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+            font-size: 0.95em;
+        }
+
+        .query-item input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .query-item input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .query-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .query-item-name {
+            font-weight: bold;
+            color: #667eea;
+            font-size: 1.1em;
+        }
+
+        .btn-small {
+            padding: 5px 15px;
+            font-size: 0.9em;
+            border-radius: 20px;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%);
+        }
+
+        .btn-edit {
+            background: linear-gradient(135deg, #51cf66 0%, #37b24d 100%);
+            margin-right: 10px;
+        }
+
+        .editor-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Yahoo ワード解析ダッシュボード</h1>
+            <p class="subtitle">ジャンプ作品のSNS反応を可視化・分析</p>
+        </div>
+
+        <div class="query-editor" id="queryEditor">
+            <h2>🔍 検索クエリ設定</h2>
+            <div class="query-list" id="queryList"></div>
+            <div class="editor-actions">
+                <button class="btn btn-secondary" onclick="resetQueries()">🔄 デフォルトに戻す</button>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="btn" id="startBtn" onclick="startAnalysis()">
+                🚀 解析開始
+            </button>
+            <button class="btn btn-secondary" id="downloadBtn" onclick="downloadCSV()" style="display: none;">
+                📥 CSV ダウンロード
+            </button>
+        </div>
+
+        <div class="progress-container" id="progressContainer">
+            <h2>解析中...</h2>
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+            <div class="progress-text" id="progressText">準備中...</div>
+        </div>
+
+        <div id="summaryTable" style="display: none;" class="summary-table">
+            <h2 style="margin-bottom: 20px; color: #667eea;">📈 サマリー</h2>
+            <table id="summaryTableContent"></table>
+        </div>
+
+        <div class="results-container" id="resultsContainer"></div>
+    </div>
+
+    <script>
+        let progressInterval = null;
+        let currentQueries = [];
+
+        // ページロード時にデフォルトクエリを取得
+        window.addEventListener('DOMContentLoaded', async () => {
+            await loadQueries();
+        });
+
+        async function loadQueries() {
+            try {
+                const response = await fetch('/api/get_queries');
+                const data = await response.json();
+                currentQueries = data.queries;
+                renderQueryEditor();
+            } catch (error) {
+                console.error('クエリの取得に失敗:', error);
+            }
+        }
+
+        function renderQueryEditor() {
+            const queryList = document.getElementById('queryList');
+            queryList.innerHTML = '';
+
+            currentQueries.forEach((query, index) => {
+                const item = document.createElement('div');
+                item.className = 'query-item';
+                item.innerHTML = `
+                    <div class="query-item-header">
+                        <span class="query-item-name">${query.name}</span>
+                    </div>
+                    <label>検索クエリ:</label>
+                    <input type="text" value="${query.query}" data-index="${index}" onchange="updateQuery(${index}, this.value)">
+                `;
+                queryList.appendChild(item);
+            });
+        }
+
+        function updateQuery(index, newValue) {
+            currentQueries[index].query = newValue;
+        }
+
+        async function resetQueries() {
+            await loadQueries();
+            alert('デフォルトのクエリに戻しました。');
+        }
+
+        async function startAnalysis() {
+            const startBtn = document.getElementById('startBtn');
+            const progressContainer = document.getElementById('progressContainer');
+            const resultsContainer = document.getElementById('resultsContainer');
+            const summaryTable = document.getElementById('summaryTable');
+            const downloadBtn = document.getElementById('downloadBtn');
+
+            startBtn.disabled = true;
+            progressContainer.style.display = 'block';
+            resultsContainer.style.display = 'none';
+            resultsContainer.innerHTML = '';
+            summaryTable.style.display = 'none';
+            downloadBtn.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/start_analysis', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ queries: currentQueries })
+                });
+
+                if (!response.ok) {
+                    throw new Error('解析の開始に失敗しました');
+                }
+
+                // 進捗の監視を開始
+                progressInterval = setInterval(checkProgress, 1000);
+
+            } catch (error) {
+                alert('エラー: ' + error.message);
+                startBtn.disabled = false;
+                progressContainer.style.display = 'none';
+            }
+        }
+
+        async function checkProgress() {
+            try {
+                const response = await fetch('/api/progress');
+                const data = await response.json();
+
+                const progressFill = document.getElementById('progressFill');
+                const progressText = document.getElementById('progressText');
+
+                if (data.total > 0) {
+                    const percentage = Math.round((data.current / data.total) * 100);
+                    progressFill.style.width = percentage + '%';
+                    progressFill.textContent = percentage + '%';
+                    progressText.textContent = `${data.message} (${data.current}/${data.total})`;
+                } else {
+                    progressText.textContent = data.message;
+                }
+
+                if (data.status === 'completed') {
+                    clearInterval(progressInterval);
+                    progressInterval = null;
+                    await loadResults();
+                } else if (data.status === 'error') {
+                    clearInterval(progressInterval);
+                    progressInterval = null;
+                    alert('エラーが発生しました: ' + data.message);
+                    document.getElementById('startBtn').disabled = false;
+                    document.getElementById('progressContainer').style.display = 'none';
+                }
+
+            } catch (error) {
+                console.error('進捗の取得に失敗:', error);
+            }
+        }
+
+        async function loadResults() {
+            try {
+                const response = await fetch('/api/results');
+                const data = await response.json();
+
+                const resultsContainer = document.getElementById('resultsContainer');
+                const summaryTable = document.getElementById('summaryTable');
+                const summaryTableContent = document.getElementById('summaryTableContent');
+                const downloadBtn = document.getElementById('downloadBtn');
+
+                resultsContainer.innerHTML = '';
+                
+                // サマリーテーブルを作成
+                let tableHTML = '<thead><tr><th>作品名</th><th>参照カウント</th><th>合計カウント</th><th>終了時刻</th></tr></thead><tbody>';
+                
+                data.results.forEach((result, index) => {
+                    // サマリーテーブルに追加
+                    tableHTML += `
+                        <tr>
+                            <td><strong>${result['作品名']}</strong></td>
+                            <td>${result['参照カウント'] !== null ? result['参照カウント'] : 'N/A'}</td>
+                            <td>${result['合計カウント'] !== null ? result['合計カウント'].toFixed(2) : 'N/A'}</td>
+                            <td>${result['合計カウント終了時刻']}</td>
+                        </tr>
+                    `;
+
+                    // 詳細カードを作成
+                    if (result.chart_data) {
+                        const card = document.createElement('div');
+                        card.className = 'result-card';
+                        const chartId = `chart-${index}`;
+                        card.innerHTML = `
+                            <div class="result-header">
+                                <div class="result-title">${result['作品名']}</div>
+                            </div>
+                            <div class="result-query">クエリ: ${result['クエリ']}</div>
+                            <div class="result-stats">
+                                <div class="stat-item">
+                                    <div class="stat-label">参照カウント</div>
+                                    <div class="stat-value">${result['参照カウント'] !== null ? result['参照カウント'] : 'N/A'}</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-label">合計カウント</div>
+                                    <div class="stat-value">${result['合計カウント'] !== null ? result['合計カウント'].toFixed(2) : 'N/A'}</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-label">終了時刻</div>
+                                    <div class="stat-value" style="font-size: 1em;">${result['合計カウント終了時刻']}</div>
+                                </div>
+                            </div>
+                            <div class="chart-container">
+                                <canvas id="${chartId}"></canvas>
+                            </div>
+                        `;
+                        resultsContainer.appendChild(card);
+                        
+                        // Chart.jsでグラフを描画
+                        createChart(chartId, result);
+                    }
+                });
+
+                tableHTML += '</tbody>';
+                summaryTableContent.innerHTML = tableHTML;
+
+                summaryTable.style.display = 'block';
+                resultsContainer.style.display = 'block';
+                downloadBtn.style.display = 'inline-block';
+                document.getElementById('progressContainer').style.display = 'none';
+                document.getElementById('startBtn').disabled = false;
+
+                // 結果までスクロール
+                summaryTable.scrollIntoView({ behavior: 'smooth' });
+
+            } catch (error) {
+                alert('結果の取得に失敗しました: ' + error.message);
+                document.getElementById('startBtn').disabled = false;
+                document.getElementById('progressContainer').style.display = 'none';
+            }
+        }
+
+        function createChart(chartId, result) {
+            const ctx = document.getElementById(chartId).getContext('2d');
+            
+            // 参照カウントのライン用データ
+            const referenceLineData = result.chart_data.map(point => ({
+                x: point.x,
+                y: result['参照カウント']
+            }));
+
+            const datasets = [
+                {
+                    label: 'ツイート数',
+                    data: result.chart_data,
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                    borderWidth: 2,
+                    fill: false,
+                    tension: 0.1,
+                    pointRadius: 0,
+                    pointHoverRadius: 5
+                }
+            ];
+
+            // 合計領域データがあれば追加
+            if (result.sum_range_data && result.sum_range_data.length > 0) {
+                datasets.push({
+                    label: `合計領域 (値: ${result['合計カウント'].toFixed(2)})`,
+                    data: result.sum_range_data,
+                    backgroundColor: 'rgba(135, 206, 235, 0.4)',
+                    borderColor: 'rgba(135, 206, 235, 0.8)',
+                    borderWidth: 1,
+                    fill: 'origin',
+                    tension: 0.1,
+                    pointRadius: 0
+                });
+            }
+
+            new Chart(ctx, {
+                type: 'line',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'hour',
+                                displayFormats: {
+                                    hour: 'MM/dd HH:mm'
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: '日時',
+                                font: { size: 14 }
+                            },
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'ワードカウント',
+                                font: { size: 14 }
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `Yahooワードカウント「${result['クエリ']}」と合計のハイライト`,
+                            font: { size: 16 }
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    label += context.parsed.y;
+                                    return label;
+                                }
+                            }
+                        },
+                        annotation: {
+                            annotations: {
+                                referenceLine: {
+                                    type: 'line',
+                                    yMin: result['参照カウント'],
+                                    yMax: result['参照カウント'],
+                                    borderColor: 'rgb(76, 175, 80)',
+                                    borderWidth: 2,
+                                    borderDash: [10, 5],
+                                    label: {
+                                        display: true,
+                                        content: `参照カウント: ${result['参照カウント']}`,
+                                        position: 'end',
+                                        backgroundColor: 'rgba(76, 175, 80, 0.8)'
+                                    }
+                                },
+                                referenceTimeLine: {
+                                    type: 'line',
+                                    xMin: result.reference_datetime,
+                                    xMax: result.reference_datetime,
+                                    borderColor: 'rgb(255, 99, 132)',
+                                    borderWidth: 2,
+                                    borderDash: [5, 5],
+                                    label: {
+                                        display: true,
+                                        content: `参照時刻: ${result.reference_datetime}`,
+                                        position: 'start',
+                                        backgroundColor: 'rgba(255, 99, 132, 0.8)'
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function downloadCSV() {
+            window.location.href = '/api/download_csv';
+        }
+    </script>
+</body>
+</html>

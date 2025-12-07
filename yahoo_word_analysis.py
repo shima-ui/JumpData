@@ -176,8 +176,14 @@ def main():
 
         sum_end_datetime_for_print = actual_sum_end_datetime
 
-        sum_value = df_sum_range['count'].sum() if not df_sum_range.empty else 0
-        print(f"計算された合計カウント: {sum_value:.2f}")
+        # 各時間帯のcount - 参照カウントを計算し、負の値は0とする
+        if not df_sum_range.empty:
+            df_sum_range['count_diff'] = (df_sum_range['count'] - reference_count).clip(lower=0)
+            sum_value = df_sum_range['count_diff'].sum()
+        else:
+            sum_value = 0
+        
+        print(f"計算された合計カウント（参照値差分）: {sum_value:.2f}")
 
         print(f"合計カウント開始日時: {reference_base_datetime}")
         print(f"合計カウント終了日時: {sum_end_datetime_for_print if sum_end_datetime_for_print else 'データなし'}")
@@ -190,8 +196,6 @@ def main():
             '合計カウント': sum_value,
             '合計カウント終了時刻': sum_end_datetime_for_print.strftime('%Y-%m-%d %H:%M:%S') if sum_end_datetime_for_print else 'データなし'
         })
-
-
 
     # ループ終了後、summary_dataからDataFrameを作成し表示
     df_summary = pd.DataFrame(summary_data)

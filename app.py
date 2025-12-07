@@ -8,7 +8,7 @@ import numpy as np
 import io
 import os
 from threading import Lock
-from config import QUERY_DICT, INTERVAL_HOUR, SPAN_HOUR, REFERENCE_BASE_DATETIME
+from config import QUERY_DICT, INTERVAL_HOUR, SPAN_HOUR, REFERENCE_ISSUE_NUMBER
 
 app = Flask(__name__)
 
@@ -16,6 +16,39 @@ app = Flask(__name__)
 analysis_lock = Lock()
 analysis_results = None
 analysis_progress = {"current": 0, "total": 0, "status": "idle", "message": ""}
+issue_date_mapping_cache = None  # 号数-日付マッピングのキャッシュ
+
+# 号数-日付マッピングを読み込む関数
+def load_issue_date_mapping():
+    """issue_date_mapping.csvから号数と日付のマッピングを読み込む"""
+    global issue_date_mapping_cache
+    
+    if issue_date_mapping_cache is not None:
+        return issue_date_mapping_cache
+    
+    try:
+        df = pd.read_csv('issue_date_mapping.csv')
+        mapping = {}
+        for _, row in df.iterrows():
+            issue_num = int(row['issue_number'])
+            date_str = row['date']
+            # タイムゾーン情報を付与
+            dt = pd.to_datetime(date_str)
+            if dt.tzinfo is None:
+                dt = dt.tz_localize('Asia/Tokyo')
+            mapping[issue_num] = dt
+        issue_date_mapping_cache = mapping
+        return mapping
+    except Exception as e:
+        print(f"Error loading issue_date_mapping.csv: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return {}
+
+def get_date_from_issue_number(issue_number):
+    """号数から日付を取得"""
+    mapping = load_issue_date_mapping()
+    return mapping.get(int(issue_number))
 
 # --- YahooGateway クラスの定義 ---
 Headers = {"User-Agent": "Mozilla/5.0"}
@@ -121,6 +154,14 @@ def analyze_word(display_name, query_string, interval_hour, span_hour, reference
 
     df_yahoo_word_counts = pd.DataFrame(yahoo_word_counts)
     df_yahoo_word_counts['from_date'] = pd.to_datetime(df_yahoo_word_counts['from_date'])
+    
+    # タイムゾーンを統一（Asia/Tokyo）
+    if df_yahoo_word_counts['from_date'].dt.tz is None:
+        df_yahoo_word_counts['from_date'] = df_yahoo_word_counts['from_date'].dt.tz_localize('Asia/Tokyo')
+    
+    # reference_base_datetimeがタイムゾーン情報を持っているか確認
+    if hasattr(reference_base_datetime, 'tzinfo') and reference_base_datetime.tzinfo is None:
+        reference_base_datetime = reference_base_datetime.tz_localize('Asia/Tokyo')
 
     # 1時間前から15分おきに4つのデータポイントを取得
     reference_times = [
@@ -192,11 +233,24 @@ def analyze_word(display_name, query_string, interval_hour, span_hour, reference
     else:
         df_after_one_hour_range = pd.DataFrame()
     
+    print(f"分析完了: {display_name}", flush=True)
+    print(f"基準日時: {reference_base_datetime}", flush=True)
+    print(f"参照カウント: {reference_count}", flush=True)
+    
+    # タイムゾーン情報を除去して文字列化する関数
+    def format_datetime(dt):
+        if hasattr(dt, 'tz_localize'):
+            return dt.tz_localize(None).strftime('%Y-%m-%d %H:%M:%S')
+        elif hasattr(dt, 'strftime'):
+            return dt.strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            return str(dt)
+    
     # グラフ用の生データを準備
     chart_data = []
     for _, row in df_yahoo_word_counts.iterrows():
         chart_data.append({
-            'x': row['from_date'].strftime('%Y-%m-%d %H:%M:%S'),
+            'x': format_datetime(row['from_date']),
             'y': int(row['count'])
         })
     
@@ -206,7 +260,7 @@ def analyze_word(display_name, query_string, interval_hour, span_hour, reference
         for _, row in df_one_hour_range.iterrows():
             if row['count'] > reference_count:
                 one_hour_range_data.append({
-                    'x': row['from_date'].strftime('%Y-%m-%d %H:%M:%S'),
+                    'x': format_datetime(row['from_date']),
                     'y': int(row['count'])
                 })
     
@@ -216,7 +270,7 @@ def analyze_word(display_name, query_string, interval_hour, span_hour, reference
         for _, row in df_after_one_hour_range.iterrows():
             if row['count'] > reference_count:
                 after_one_hour_range_data.append({
-                    'x': row['from_date'].strftime('%Y-%m-%d %H:%M:%S'),
+                    'x': format_datetime(row['from_date']),
                     'y': int(row['count'])
                 })
 
@@ -229,12 +283,12 @@ def analyze_word(display_name, query_string, interval_hour, span_hour, reference
         '参照カウント': reference_count,
         '1時間集計': one_hour_sum_value,
         '全体集計': sum_value,
-        '全体集計終了時刻': actual_sum_end_datetime.strftime('%Y-%m-%d %H:%M:%S') if actual_sum_end_datetime else 'データなし',
+        '全体集計終了時刻': format_datetime(actual_sum_end_datetime) if actual_sum_end_datetime else 'データなし',
         'chart_data': chart_data,
         'one_hour_range_data': one_hour_range_data,
         'after_one_hour_range_data': after_one_hour_range_data,
-        'reference_datetime': reference_datetime_for_display.strftime('%Y-%m-%d %H:%M:%S'),
-        'reference_base_datetime': reference_base_datetime.strftime('%Y-%m-%d %H:%M:%S')
+        'reference_datetime': format_datetime(reference_datetime_for_display),
+        'reference_base_datetime': format_datetime(reference_base_datetime)
     }
 
 @app.route('/')
@@ -244,11 +298,23 @@ def index():
 
 @app.route('/api/get_queries')
 def get_queries():
-    """デフォルトのクエリ辞書と基準日時を取得"""
+    """デフォルトのクエリ辞書と基準号数を取得"""
     queries = [{'name': k, 'query': v} for k, v in QUERY_DICT.items()]
+    mapping = load_issue_date_mapping()
+    
+    # タイムゾーン情報を除いて文字列に変換
+    date_mapping_str = {}
+    for k, v in mapping.items():
+        if hasattr(v, 'tz_localize'):
+            # タイムゾーン情報を削除
+            date_mapping_str[k] = v.tz_localize(None).strftime('%Y-%m-%d %H:%M:%S')
+        else:
+            date_mapping_str[k] = v.strftime('%Y-%m-%d %H:%M:%S')
+    
     return jsonify({
         "queries": queries,
-        "reference_base_datetime": REFERENCE_BASE_DATETIME
+        "reference_issue_number": REFERENCE_ISSUE_NUMBER,
+        "issue_date_mapping": date_mapping_str
     })
 
 @app.route('/api/start_analysis', methods=['POST'])
@@ -263,10 +329,10 @@ def start_analysis():
         analysis_progress = {"current": 0, "total": 0, "status": "running", "message": "初期化中..."}
         analysis_results = None
     
-    # リクエストからクエリと基準日時を取得
+    # リクエストからクエリと基準号数を取得
     data = request.get_json()
     queries = data.get('queries', [])
-    reference_base_datetime = data.get('reference_base_datetime', REFERENCE_BASE_DATETIME)
+    reference_issue_number = data.get('reference_issue_number', REFERENCE_ISSUE_NUMBER)
     
     # クエリが空の場合はデフォルトを使用
     if not queries:
@@ -274,14 +340,14 @@ def start_analysis():
     
     # 別スレッドで解析を実行
     import threading
-    thread = threading.Thread(target=run_analysis, args=(queries, reference_base_datetime))
+    thread = threading.Thread(target=run_analysis, args=(queries, reference_issue_number))
     thread.daemon = True
     thread.start()
     
     return jsonify({"message": "Analysis started"})
 
-def run_analysis(queries, reference_base_datetime_str=None):
-    """解析を実行（バックグラウンド）"""
+def run_analysis(queries, reference_issue_number=None):
+    """解析を実行(バックグラウンド)"""
     global analysis_results, analysis_progress
     
     try:
@@ -290,7 +356,13 @@ def run_analysis(queries, reference_base_datetime_str=None):
 
         interval_hour = INTERVAL_HOUR
         span_hour = SPAN_HOUR
-        reference_base_datetime = pd.to_datetime(reference_base_datetime_str or REFERENCE_BASE_DATETIME)
+        # 号数から日付を取得
+        if reference_issue_number is None:
+            reference_issue_number = REFERENCE_ISSUE_NUMBER
+        reference_base_datetime = get_date_from_issue_number(reference_issue_number)
+        
+        if reference_base_datetime is None:
+            raise ValueError(f"号数 {reference_issue_number} に対応する日付が見つかりません")
 
         analysis_progress["total"] = len(query_dict)
         summary_data = []
@@ -307,6 +379,9 @@ def run_analysis(queries, reference_base_datetime_str=None):
         analysis_progress["message"] = "解析完了"
         
     except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"Error in run_analysis: {error_detail}")
         analysis_progress["status"] = "error"
         analysis_progress["message"] = f"エラー: {str(e)}"
 
@@ -335,8 +410,8 @@ def download_csv():
     if analysis_results is None:
         return jsonify({"error": "No results available"}), 404
     
-    # chart_data, sum_range_dataなどのグラフ用データを除外してCSV作成
-    df_results = pd.DataFrame([{k: v for k, v in r.items() if k not in ['chart_data', 'sum_range_data', 'reference_datetime', 'reference_base_datetime']} for r in analysis_results])
+    # chart_data, range_dataなどのグラフ用データを除外してCSV作成
+    df_results = pd.DataFrame([{k: v for k, v in r.items() if k not in ['chart_data', 'one_hour_range_data', 'after_one_hour_range_data', 'reference_datetime', 'reference_base_datetime']} for r in analysis_results])
     
     output = io.StringIO()
     df_results.to_csv(output, index=False, encoding='utf-8-sig')

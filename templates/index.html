@@ -737,10 +737,12 @@
         </div>
 
         <div class="datetime-setting">
-            <h3>📅 基準日時設定</h3>
+            <h3>📅 基準号数設定</h3>
             <div class="datetime-input">
-                <span class="datetime-label">基準日時:</span>
-                <input type="datetime-local" id="referenceDatetime" onchange="updateReferenceDateTime()">
+                <span class="datetime-label">基準号数:</span>
+                <select id="referenceIssueNumber" onchange="updateReferenceIssueNumber()">
+                </select>
+                <span id="selectedIssueDate" style="margin-left: 10px; color: #666; font-size: 0.9em;"></span>
             </div>
         </div>
 
@@ -794,7 +796,8 @@
     <script>
         let progressInterval = null;
         let currentQueries = [];
-        let currentReferenceDateTime = '';
+        let currentReferenceIssueNumber = 1;
+        let issueDateMapping = {}; // 号数と日付のマッピング
         let querySelections = {}; // 各作品の選択状態を保持
         let currentResults = null; // 結果データを保持
         let currentReportTab = 'total'; // 現在のレポートタブ
@@ -803,14 +806,39 @@
             return `/static/images/${queryName}.jpg`;
         }
 
-        function updateReferenceDateTime() {
-            const datetimeInput = document.getElementById('referenceDatetime');
-            currentReferenceDateTime = datetimeInput.value;
+        function updateReferenceIssueNumber() {
+            const issueSelect = document.getElementById('referenceIssueNumber');
+            currentReferenceIssueNumber = parseInt(issueSelect.value);
+            updateSelectedIssueDate();
         }
 
-        function formatDateTimeForInput(dateTimeStr) {
-            // "YYYY-MM-DD HH:MM:SS" を "YYYY-MM-DDTHH:MM" に変換
-            return dateTimeStr.replace(' ', 'T').slice(0, 16);
+        function updateSelectedIssueDate() {
+            const dateSpan = document.getElementById('selectedIssueDate');
+            if (issueDateMapping[currentReferenceIssueNumber]) {
+                dateSpan.textContent = `(${issueDateMapping[currentReferenceIssueNumber]})`;
+            } else {
+                dateSpan.textContent = '';
+            }
+        }
+
+        function renderIssueNumberOptions() {
+            const issueSelect = document.getElementById('referenceIssueNumber');
+            issueSelect.innerHTML = '';
+            
+            // 号数でソート
+            const issueNumbers = Object.keys(issueDateMapping).map(Number).sort((a, b) => a - b);
+            
+            issueNumbers.forEach(issueNum => {
+                const option = document.createElement('option');
+                option.value = issueNum;
+                option.textContent = `${issueNum}号`;
+                if (issueNum === currentReferenceIssueNumber) {
+                    option.selected = true;
+                }
+                issueSelect.appendChild(option);
+            });
+            
+            updateSelectedIssueDate();
         }
 
         function updateQuerySelection(index, isSelected) {
@@ -866,7 +894,8 @@
                 const response = await fetch('/api/get_queries');
                 const data = await response.json();
                 currentQueries = data.queries;
-                currentReferenceDateTime = data.reference_base_datetime;
+                currentReferenceIssueNumber = data.reference_issue_number;
+                issueDateMapping = data.issue_date_mapping;
                 
                 // 選択状態を初期化（デフォルトで全選択）
                 querySelections = {};
@@ -874,9 +903,8 @@
                     querySelections[index] = true;
                 });
                 
-                // 日時入力フィールドにセット
-                const datetimeInput = document.getElementById('referenceDatetime');
-                datetimeInput.value = formatDateTimeForInput(currentReferenceDateTime);
+                // 号数選択肢をレンダリング
+                renderIssueNumberOptions();
                 
                 renderQueryEditor();
             } catch (error) {
@@ -955,7 +983,7 @@
                     },
                     body: JSON.stringify({ 
                         queries: selectedQueries,
-                        reference_base_datetime: currentReferenceDateTime
+                        reference_issue_number: currentReferenceIssueNumber
                     })
                 });
 

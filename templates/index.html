@@ -150,7 +150,7 @@
 
         .result-stats {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
             gap: 15px;
             margin-bottom: 20px;
         }
@@ -739,7 +739,7 @@
                 resultsContainer.innerHTML = '';
                 
                 // サマリーテーブルを作成
-                let tableHTML = '<thead><tr><th>作品名</th><th>参照カウント</th><th>合計カウント</th><th>終了時刻</th></tr></thead><tbody>';
+                let tableHTML = '<thead><tr><th>作品名</th><th>参照カウント</th><th>1時間合計</th><th>合計カウント</th><th>終了時刻</th></tr></thead><tbody>';
                 
                 data.results.forEach((result, index) => {
                     // サマリーテーブルに追加
@@ -753,6 +753,7 @@
                                 </div>
                             </td>
                             <td>${result['参照カウント'] !== null ? result['参照カウント'] : 'N/A'}</td>
+                            <td>${result['1時間合計カウント'] !== null ? result['1時間合計カウント'].toFixed(2) : 'N/A'}</td>
                             <td>${result['合計カウント'] !== null ? result['合計カウント'].toFixed(2) : 'N/A'}</td>
                             <td>${result['合計カウント終了時刻']}</td>
                         </tr>
@@ -776,6 +777,10 @@
                                 <div class="stat-item">
                                     <div class="stat-label">参照カウント</div>
                                     <div class="stat-value">${result['参照カウント'] !== null ? result['参照カウント'] : 'N/A'}</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-label">1時間合計</div>
+                                    <div class="stat-value">${result['1時間合計カウント'] !== null ? result['1時間合計カウント'].toFixed(2) : 'N/A'}</div>
                                 </div>
                                 <div class="stat-item">
                                     <div class="stat-label">合計カウント</div>
@@ -828,11 +833,11 @@
             // データを時間順にソート
             const sortedChartData = [...result.chart_data].sort((a, b) => new Date(a.x) - new Date(b.x));
             
-            // 基準時刻の前後7日の範囲を計算
+            // 基準時刻の前後3日の範囲を計算（合計7日分）
             const referenceDate = new Date(result.reference_base_datetime);
-            const sevenDaysMs = 7 * 24 * 60 * 60 * 1000; // 7日をミリ秒に変換
-            const displayStartTime = new Date(referenceDate.getTime() - sevenDaysMs);
-            const displayEndTime = new Date(referenceDate.getTime() + sevenDaysMs);
+            const threeDaysMs = 3 * 24 * 60 * 60 * 1000; // 3日をミリ秒に変換
+            const displayStartTime = new Date(referenceDate.getTime() - threeDaysMs);
+            const displayEndTime = new Date(referenceDate.getTime() + threeDaysMs);
             
             // 表示範囲内のデータをフィルタリング
             const filteredChartData = sortedChartData.filter(point => {
@@ -853,39 +858,85 @@
                 actualMaxTime = displayEndTime;
             }
             
-            // 集計範囲のデータポイントのタイムスタンプを取得
-            const sumRangeTimestamps = new Set();
-            if (result.sum_range_data && result.sum_range_data.length > 0) {
-                result.sum_range_data.forEach(point => {
-                    sumRangeTimestamps.add(point.x);
+            // 1時間集計範囲のデータポイントのタイムスタンプを取得（0〜1時間）
+            const oneHourRangeTimestamps = new Set();
+            if (result.one_hour_range_data && result.one_hour_range_data.length > 0) {
+                result.one_hour_range_data.forEach(point => {
+                    oneHourRangeTimestamps.add(point.x);
                 });
             }
             
-            // 各データポイントの背景色を動的に設定（フィルタリングされたデータを使用）
-            const backgroundColors = finalChartData.map(point => {
-                if (sumRangeTimestamps.has(point.x)) {
-                    return 'rgba(54, 162, 235, 0.8)'; // 青色（集計範囲）
+            // 1時間以降の集計範囲のデータポイントのタイムスタンプを取得（1時間〜参照値を下回るまで）
+            const afterOneHourRangeTimestamps = new Set();
+            if (result.after_one_hour_range_data && result.after_one_hour_range_data.length > 0) {
+                result.after_one_hour_range_data.forEach(point => {
+                    afterOneHourRangeTimestamps.add(point.x);
+                });
+            }
+            
+            const referenceCount = result['参照カウント'];
+            
+            // 積み上げ棒グラフ用のデータセットを作成
+            // 下部セグメント: 0〜参照カウントまで（グレー）
+            const lowerSegmentData = finalChartData.map(point => ({
+                x: point.x,
+                y: Math.min(point.y, referenceCount)
+            }));
+            
+            // 上部セグメント: 参照カウントより上（色分け）
+            const upperSegmentData = finalChartData.map(point => ({
+                x: point.x,
+                y: Math.max(0, point.y - referenceCount)
+            }));
+            
+            // 下部セグメントの色（集計対象内外問わず常にグレー）
+            const lowerSegmentColors = finalChartData.map(point => {
+                return 'rgba(128, 128, 128, 0.5)'; // グレー（参照カウント以下）
+            });
+            
+            const lowerSegmentBorderColors = finalChartData.map(point => {
+                return 'rgba(128, 128, 128, 0.8)'; // グレー（参照カウント以下）
+            });
+            
+            // 上部セグメントの色分け（集計対象内のみ青/オレンジ、対象外はグレー）
+            const upperSegmentColors = finalChartData.map(point => {
+                if (oneHourRangeTimestamps.has(point.x)) {
+                    return 'rgba(54, 162, 235, 0.8)'; // 青色（0〜1時間集計範囲）
+                } else if (afterOneHourRangeTimestamps.has(point.x)) {
+                    return 'rgba(255, 159, 64, 0.8)'; // オレンジ色（1時間以降の集計範囲）
                 } else {
-                    return 'rgba(128, 128, 128, 0.5)'; // グレー（通常）
+                    return 'rgba(128, 128, 128, 0.5)'; // グレー（集計対象外）
                 }
             });
             
-            const borderColors = finalChartData.map(point => {
-                if (sumRangeTimestamps.has(point.x)) {
-                    return 'rgba(54, 162, 235, 1)'; // 青色（集計範囲）
+            const upperSegmentBorderColors = finalChartData.map(point => {
+                if (oneHourRangeTimestamps.has(point.x)) {
+                    return 'rgba(54, 162, 235, 1)'; // 青色（0〜1時間集計範囲）
+                } else if (afterOneHourRangeTimestamps.has(point.x)) {
+                    return 'rgba(255, 159, 64, 1)'; // オレンジ色（1時間以降の集計範囲）
                 } else {
-                    return 'rgba(128, 128, 128, 0.8)'; // グレー（通常）
+                    return 'rgba(128, 128, 128, 0.8)'; // グレー（集計対象外）
                 }
             });
             
             const datasets = [
                 {
-                    label: 'ポスト数',
-                    data: finalChartData,
-                    backgroundColor: backgroundColors,
-                    borderColor: borderColors,
+                    label: '参照カウント以下',
+                    data: lowerSegmentData,
+                    backgroundColor: lowerSegmentColors,
+                    borderColor: lowerSegmentBorderColors,
                     borderWidth: 1,
-                    maxBarThickness: 20
+                    maxBarThickness: 20,
+                    stack: 'stack1'
+                },
+                {
+                    label: '参照カウント超過',
+                    data: upperSegmentData,
+                    backgroundColor: upperSegmentColors,
+                    borderColor: upperSegmentBorderColors,
+                    borderWidth: 1,
+                    maxBarThickness: 20,
+                    stack: 'stack1'
                 }
             ];
 
@@ -947,12 +998,19 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) {
-                                        label += ': ';
-                                    }
-                                    label += context.parsed.y;
-                                    return label;
+                                    // 積み上げグラフの場合、合計値を表示
+                                    const dataIndex = context.dataIndex;
+                                    const datasets = context.chart.data.datasets;
+                                    let total = 0;
+                                    datasets.forEach(dataset => {
+                                        total += dataset.data[dataIndex].y;
+                                    });
+                                    return 'ポスト数: ' + total;
+                                },
+                                afterLabel: function(context) {
+                                    // 参照カウントを表示
+                                    const refCount = result['参照カウント'];
+                                    return '参照カウント: ' + refCount.toFixed(2);
                                 }
                             }
                         },

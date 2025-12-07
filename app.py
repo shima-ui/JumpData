@@ -170,12 +170,26 @@ def analyze_word(display_name, query_string, interval_hour, span_hour, reference
     else:
         actual_sum_end_datetime = None
 
+    # 1時間集計の範囲
+    df_one_hour_range = df_sum_calculation[df_sum_calculation['from_date'] < min_sum_duration_end_time].copy()
+    one_hour_sum_value = df_one_hour_range['count'].sum() if not df_one_hour_range.empty else 0
+    
+    # 参照値を下回るまでの集計範囲（現行）
     if actual_sum_end_datetime:
         df_sum_range = df_sum_calculation[df_sum_calculation['from_date'] < actual_sum_end_datetime].copy()
     else:
         df_sum_range = pd.DataFrame()
 
     sum_value = df_sum_range['count'].sum() if not df_sum_range.empty else 0
+    
+    # 1時間以降の集計範囲（1時間～参照値を下回るまで）
+    if actual_sum_end_datetime and actual_sum_end_datetime > min_sum_duration_end_time:
+        df_after_one_hour_range = df_sum_calculation[
+            (df_sum_calculation['from_date'] >= min_sum_duration_end_time) & 
+            (df_sum_calculation['from_date'] < actual_sum_end_datetime)
+        ].copy()
+    else:
+        df_after_one_hour_range = pd.DataFrame()
     
     # グラフ用の生データを準備
     chart_data = []
@@ -185,12 +199,22 @@ def analyze_word(display_name, query_string, interval_hour, span_hour, reference
             'y': int(row['count'])
         })
     
-    # 合計領域のデータ
-    sum_range_data = []
-    if not df_sum_range.empty:
-        for _, row in df_sum_range.iterrows():
+    # 1時間集計範囲のデータ（0〜1時間）
+    one_hour_range_data = []
+    if not df_one_hour_range.empty:
+        for _, row in df_one_hour_range.iterrows():
             if row['count'] > reference_count:
-                sum_range_data.append({
+                one_hour_range_data.append({
+                    'x': row['from_date'].strftime('%Y-%m-%d %H:%M:%S'),
+                    'y': int(row['count'])
+                })
+    
+    # 1時間以降の集計範囲のデータ（1時間〜参照値を下回るまで）
+    after_one_hour_range_data = []
+    if not df_after_one_hour_range.empty:
+        for _, row in df_after_one_hour_range.iterrows():
+            if row['count'] > reference_count:
+                after_one_hour_range_data.append({
                     'x': row['from_date'].strftime('%Y-%m-%d %H:%M:%S'),
                     'y': int(row['count'])
                 })
@@ -202,10 +226,12 @@ def analyze_word(display_name, query_string, interval_hour, span_hour, reference
         '作品名': display_name,
         'クエリ': query_string,
         '参照カウント': reference_count,
+        '1時間合計カウント': one_hour_sum_value,
         '合計カウント': sum_value,
         '合計カウント終了時刻': actual_sum_end_datetime.strftime('%Y-%m-%d %H:%M:%S') if actual_sum_end_datetime else 'データなし',
         'chart_data': chart_data,
-        'sum_range_data': sum_range_data,
+        'one_hour_range_data': one_hour_range_data,
+        'after_one_hour_range_data': after_one_hour_range_data,
         'reference_datetime': reference_datetime_for_display.strftime('%Y-%m-%d %H:%M:%S'),
         'reference_base_datetime': reference_base_datetime.strftime('%Y-%m-%d %H:%M:%S')
     }

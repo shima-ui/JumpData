@@ -113,8 +113,9 @@ def analyze_word(display_name, query_string, interval_hour, span_hour, reference
             '作品名': display_name,
             'クエリ': query_string,
             '参照カウント': None,
-            '合計カウント': None,
-            '合計カウント終了時刻': 'データなし',
+            '1時間集計': None,
+            '全体集計': None,
+            '全体集計終了時刻': 'データなし',
             'plot': None
         }
 
@@ -226,9 +227,9 @@ def analyze_word(display_name, query_string, interval_hour, span_hour, reference
         '作品名': display_name,
         'クエリ': query_string,
         '参照カウント': reference_count,
-        '1時間合計カウント': one_hour_sum_value,
-        '合計カウント': sum_value,
-        '合計カウント終了時刻': actual_sum_end_datetime.strftime('%Y-%m-%d %H:%M:%S') if actual_sum_end_datetime else 'データなし',
+        '1時間集計': one_hour_sum_value,
+        '全体集計': sum_value,
+        '全体集計終了時刻': actual_sum_end_datetime.strftime('%Y-%m-%d %H:%M:%S') if actual_sum_end_datetime else 'データなし',
         'chart_data': chart_data,
         'one_hour_range_data': one_hour_range_data,
         'after_one_hour_range_data': after_one_hour_range_data,

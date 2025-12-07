@@ -162,6 +162,18 @@
             border-left: 4px solid #667eea;
         }
 
+        .stat-item.reference {
+            border-left: 4px solid rgb(76, 175, 80);
+        }
+
+        .stat-item.one-hour {
+            border-left: 4px solid rgba(54, 162, 235, 1);
+        }
+
+        .stat-item.total {
+            border-left: 4px solid rgba(41, 98, 255, 1);
+        }
+
         .stat-label {
             color: #666;
             font-size: 0.9em;
@@ -172,6 +184,12 @@
             color: #333;
             font-size: 1.3em;
             font-weight: bold;
+        }
+
+        .stat-time {
+            color: #999;
+            font-size: 0.75em;
+            margin-top: 5px;
         }
 
         .result-query {
@@ -458,6 +476,258 @@
             font-weight: bold;
             font-size: 0.9em;
         }
+
+        .report-container {
+            display: none;
+            background: linear-gradient(135deg, #DC143C 0%, #8B0000 100%);
+            border-radius: 15px;
+            padding: 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .report-header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .report-title {
+            font-size: 2.8em;
+            color: #FFD700;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+            font-weight: bold;
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+        }
+
+        .report-subtitle {
+            color: white;
+            font-size: 1.2em;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        .ranking-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .rank-card {
+            background: linear-gradient(135deg, #FFE4E1 0%, #FFF0F5 100%);
+            border-radius: 12px;
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            border: 2px solid #DC143C;
+        }
+
+        .rank-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(220, 20, 60, 0.4);
+            border-color: #8B0000;
+        }
+
+        .rank-card.rank-1 {
+            grid-column: span 2;
+            background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+            color: #8B0000;
+            padding: 35px;
+            border: 4px solid #DC143C;
+            box-shadow: 0 0 30px rgba(220, 20, 60, 0.6);
+        }
+
+        .rank-card.rank-1 .rank-number {
+            font-size: 5em;
+            color: rgba(220, 20, 60, 0.3);
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .rank-card.rank-1 .rank-work-name {
+            font-size: 2.2em;
+            color: #8B0000;
+            text-shadow: 1px 1px 2px rgba(255, 215, 0, 0.5);
+        }
+
+        .rank-card.rank-1 .rank-value {
+            font-size: 3em;
+            color: #DC143C;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+        }
+
+        .rank-card.rank-2,
+        .rank-card.rank-3 {
+            background: linear-gradient(135deg, #FF6347 0%, #DC143C 100%);
+            color: white;
+            padding: 25px;
+            border: 3px solid #FFD700;
+        }
+
+        .rank-card.rank-2 .rank-number,
+        .rank-card.rank-3 .rank-number {
+            font-size: 3.5em;
+            color: rgba(255, 215, 0, 0.3);
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .rank-card.rank-2 .rank-work-name,
+        .rank-card.rank-3 .rank-work-name {
+            font-size: 1.6em;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        .rank-card.rank-2 .rank-value,
+        .rank-card.rank-3 .rank-value {
+            font-size: 2.2em;
+            color: #FFD700;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+        }
+
+        .rank-number {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 2.5em;
+            font-weight: bold;
+            color: rgba(220, 20, 60, 0.2);
+            line-height: 1;
+        }
+
+        .rank-content {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .rank-image {
+            width: 60px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 3px solid #DC143C;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .rank-card.rank-1 .rank-image {
+            width: 90px;
+            height: 90px;
+            border-color: #8B0000;
+            border-width: 4px;
+        }
+
+        .rank-card.rank-2 .rank-image,
+        .rank-card.rank-3 .rank-image {
+            width: 75px;
+            height: 75px;
+            border-color: #FFD700;
+            border-width: 3px;
+        }
+
+        .rank-work-name {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #8B0000;
+            margin-bottom: 5px;
+            text-shadow: 0.5px 0.5px 1px rgba(0, 0, 0, 0.1);
+        }
+
+        .rank-query {
+            font-size: 0.85em;
+            color: #999;
+            font-style: italic;
+        }
+
+        .rank-card.rank-1 .rank-query,
+        .rank-card.rank-2 .rank-query,
+        .rank-card.rank-3 .rank-query {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .rank-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .rank-stat {
+            text-align: center;
+            padding: 10px;
+            background: rgba(102, 126, 234, 0.05);
+            border-radius: 8px;
+        }
+
+        .rank-card.rank-1 .rank-stat,
+        .rank-card.rank-2 .rank-stat,
+        .rank-card.rank-3 .rank-stat {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .rank-stat-label {
+            font-size: 0.75em;
+            color: #999;
+            margin-bottom: 3px;
+        }
+
+        .rank-card.rank-1 .rank-stat-label,
+        .rank-card.rank-2 .rank-stat-label,
+        .rank-card.rank-3 .rank-stat-label {
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .rank-value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #DC143C;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+        }
+
+        .rank-stat-value {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .rank-card.rank-1 .rank-stat-value,
+        .rank-card.rank-2 .rank-stat-value,
+        .rank-card.rank-3 .rank-stat-value {
+            color: white;
+        }
+
+        .report-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            justify-content: center;
+        }
+
+        .tab-btn {
+            padding: 12px 30px;
+            border: 2px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .tab-btn:hover {
+            background: #f0f0ff;
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -504,6 +774,15 @@
             <div class="progress-text" id="progressText">準備中...</div>
         </div>
 
+        <div id="reportContainer" class="report-container">
+            <div class="report-header">
+                <h2 class="report-title">今週のジャンプ本誌関連Xデータ</h2>
+                <p class="report-subtitle">ツイート数：Yahooリアルタイム検索を元に集計</p>
+                <p class="report-subtitle">トレンド：Twitterdを元に集計</p>
+            </div>
+            <div id="rankingGrid" class="ranking-grid"></div>
+        </div>
+
         <div id="summaryTable" style="display: none;" class="summary-table">
             <h2 style="margin-bottom: 20px; color: #667eea;">📈 サマリー</h2>
             <table id="summaryTableContent"></table>
@@ -517,6 +796,8 @@
         let currentQueries = [];
         let currentReferenceDateTime = '';
         let querySelections = {}; // 各作品の選択状態を保持
+        let currentResults = null; // 結果データを保持
+        let currentReportTab = 'total'; // 現在のレポートタブ
 
         function getImageUrl(queryName) {
             return `/static/images/${queryName}.jpg`;
@@ -735,11 +1016,13 @@
                 const summaryTable = document.getElementById('summaryTable');
                 const summaryTableContent = document.getElementById('summaryTableContent');
                 const downloadBtn = document.getElementById('downloadBtn');
+                const reportBtn = document.getElementById('reportBtn');
 
                 resultsContainer.innerHTML = '';
+                currentResults = data.results; // 結果を保存
                 
                 // サマリーテーブルを作成
-                let tableHTML = '<thead><tr><th>作品名</th><th>参照カウント</th><th>1時間合計</th><th>合計カウント</th><th>終了時刻</th></tr></thead><tbody>';
+                let tableHTML = '<thead><tr><th>作品名</th><th>クエリ</th><th>参照カウント</th><th>1時間集計</th><th>全体集計</th><th>終了時刻</th></tr></thead><tbody>';
                 
                 data.results.forEach((result, index) => {
                     // サマリーテーブルに追加
@@ -752,10 +1035,11 @@
                                     <strong>${result['作品名']}</strong>
                                 </div>
                             </td>
+                            <td style="font-size: 0.9em; color: #666;">${result['クエリ']}</td>
                             <td>${result['参照カウント'] !== null ? result['参照カウント'] : 'N/A'}</td>
-                            <td>${result['1時間合計カウント'] !== null ? result['1時間合計カウント'].toFixed(2) : 'N/A'}</td>
-                            <td>${result['合計カウント'] !== null ? result['合計カウント'].toFixed(2) : 'N/A'}</td>
-                            <td>${result['合計カウント終了時刻']}</td>
+                            <td>${result['1時間集計'] !== null ? Math.round(result['1時間集計']) : 'N/A'}</td>
+                            <td>${result['全体集計'] !== null ? Math.round(result['全体集計']) : 'N/A'}</td>
+                            <td>${result['全体集計終了時刻']}</td>
                         </tr>
                     `;
 
@@ -774,21 +1058,18 @@
                             </div>
                             <div class="result-query">クエリ: ${result['クエリ']}</div>
                             <div class="result-stats">
-                                <div class="stat-item">
+                                <div class="stat-item reference">
                                     <div class="stat-label">参照カウント</div>
                                     <div class="stat-value">${result['参照カウント'] !== null ? result['参照カウント'] : 'N/A'}</div>
                                 </div>
-                                <div class="stat-item">
-                                    <div class="stat-label">1時間合計</div>
-                                    <div class="stat-value">${result['1時間合計カウント'] !== null ? result['1時間合計カウント'].toFixed(2) : 'N/A'}</div>
+                                <div class="stat-item one-hour">
+                                    <div class="stat-label">1時間集計</div>
+                                    <div class="stat-value">${result['1時間集計'] !== null ? Math.round(result['1時間集計']) : 'N/A'}</div>
                                 </div>
-                                <div class="stat-item">
-                                    <div class="stat-label">合計カウント</div>
-                                    <div class="stat-value">${result['合計カウント'] !== null ? result['合計カウント'].toFixed(2) : 'N/A'}</div>
-                                </div>
-                                <div class="stat-item">
-                                    <div class="stat-label">終了時刻</div>
-                                    <div class="stat-value" style="font-size: 1em;">${result['合計カウント終了時刻']}</div>
+                                <div class="stat-item total">
+                                    <div class="stat-label">全体集計</div>
+                                    <div class="stat-value">${result['全体集計'] !== null ? Math.round(result['全体集計']) : 'N/A'}</div>
+                                    <div class="stat-time">終了: ${result['全体集計終了時刻'] ? new Date('1970-01-01 ' + result['全体集計終了時刻'].split(' ')[1]).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : 'N/A'}</div>
                                 </div>
                             </div>
                             <div class="chart-container">
@@ -805,14 +1086,18 @@
                 tableHTML += '</tbody>';
                 summaryTableContent.innerHTML = tableHTML;
 
+                // レポートを自動表示
+                document.getElementById('reportContainer').style.display = 'block';
+                renderRanking('total');
+                
                 summaryTable.style.display = 'block';
                 resultsContainer.style.display = 'block';
                 downloadBtn.style.display = 'inline-block';
                 document.getElementById('progressContainer').style.display = 'none';
                 document.getElementById('startBtn').disabled = false;
 
-                // 結果までスクロール
-                summaryTable.scrollIntoView({ behavior: 'smooth' });
+                // レポートまでスクロール
+                document.getElementById('reportContainer').scrollIntoView({ behavior: 'smooth' });
 
             } catch (error) {
                 alert('結果の取得に失敗しました: ' + error.message);
@@ -898,12 +1183,12 @@
                 return 'rgba(128, 128, 128, 0.8)'; // グレー（参照カウント以下）
             });
             
-            // 上部セグメントの色分け（集計対象内のみ青/オレンジ、対象外はグレー）
+            // 上部セグメントの色分け（集計対象内のみ水色/青色、対象外はグレー）
             const upperSegmentColors = finalChartData.map(point => {
                 if (oneHourRangeTimestamps.has(point.x)) {
-                    return 'rgba(54, 162, 235, 0.8)'; // 青色（0〜1時間集計範囲）
+                    return 'rgba(54, 162, 235, 0.8)'; // 水色（0〜1時間集計範囲）
                 } else if (afterOneHourRangeTimestamps.has(point.x)) {
-                    return 'rgba(255, 159, 64, 0.8)'; // オレンジ色（1時間以降の集計範囲）
+                    return 'rgba(41, 98, 255, 0.8)'; // 青色（1時間以降の集計範囲）
                 } else {
                     return 'rgba(128, 128, 128, 0.5)'; // グレー（集計対象外）
                 }
@@ -911,9 +1196,9 @@
             
             const upperSegmentBorderColors = finalChartData.map(point => {
                 if (oneHourRangeTimestamps.has(point.x)) {
-                    return 'rgba(54, 162, 235, 1)'; // 青色（0〜1時間集計範囲）
+                    return 'rgba(54, 162, 235, 1)'; // 水色（0〜1時間集計範囲）
                 } else if (afterOneHourRangeTimestamps.has(point.x)) {
-                    return 'rgba(255, 159, 64, 1)'; // オレンジ色（1時間以降の集計範囲）
+                    return 'rgba(41, 98, 255, 1)'; // 青色（1時間以降の集計範囲）
                 } else {
                     return 'rgba(128, 128, 128, 0.8)'; // グレー（集計対象外）
                 }
@@ -1047,6 +1332,43 @@
 
         async function downloadCSV() {
             window.location.href = '/api/download_csv';
+        }
+
+        function renderRanking(sortBy) {
+            if (!currentResults) return;
+            
+            const rankingGrid = document.getElementById('rankingGrid');
+            rankingGrid.innerHTML = '';
+            
+            const sortKey = '全体集計';
+            
+            // データをソート
+            const sortedResults = [...currentResults]
+                .filter(r => r[sortKey] !== null)
+                .sort((a, b) => b[sortKey] - a[sortKey])
+                .slice(0, 10);
+            
+            // ランキングカードを生成
+            sortedResults.forEach((result, index) => {
+                const rank = index + 1;
+                const card = document.createElement('div');
+                card.className = `rank-card rank-${rank}`;
+                
+                const imageUrl = getImageUrl(result['作品名']);
+                
+                card.innerHTML = `
+                    <div class="rank-number">${rank}</div>
+                    <div class="rank-content">
+                        <img src="${imageUrl}" alt="${result['作品名']}" class="rank-image" onerror="this.style.display='none'">
+                        <div>
+                            <div class="rank-work-name">${result['作品名']}</div>
+                        </div>
+                    </div>
+                    <div class="rank-value">${Math.round(result[sortKey])}</div>
+                `;
+                
+                rankingGrid.appendChild(card);
+            });
         }
     </script>
 </body>

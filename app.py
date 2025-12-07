@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, send_file, request
+from flask import Flask, render_template, jsonify, send_file, request, send_from_directory
 import re
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
@@ -6,6 +6,7 @@ import pandas as pd
 import requests
 import numpy as np
 import io
+import os
 from threading import Lock
 from config import QUERY_DICT, INTERVAL_HOUR, SPAN_HOUR, REFERENCE_BASE_DATETIME
 
@@ -120,11 +121,22 @@ def analyze_word(display_name, query_string, interval_hour, span_hour, reference
     df_yahoo_word_counts = pd.DataFrame(yahoo_word_counts)
     df_yahoo_word_counts['from_date'] = pd.to_datetime(df_yahoo_word_counts['from_date'])
 
-    reference_datetime = reference_base_datetime - timedelta(minutes=15)
-    reference_row = df_yahoo_word_counts[df_yahoo_word_counts['from_date'] == reference_datetime]
-
-    if not reference_row.empty:
-        reference_count = reference_row['count'].iloc[0]
+    # 1時間前から15分おきに4つのデータポイントを取得
+    reference_times = [
+        reference_base_datetime - timedelta(minutes=60),  # 1時間前
+        reference_base_datetime - timedelta(minutes=45),  # 45分前
+        reference_base_datetime - timedelta(minutes=30),  # 30分前
+        reference_base_datetime - timedelta(minutes=15),  # 15分前
+    ]
+    
+    reference_counts = []
+    for ref_time in reference_times:
+        ref_row = df_yahoo_word_counts[df_yahoo_word_counts['from_date'] == ref_time]
+        if not ref_row.empty:
+            reference_counts.append(ref_row['count'].iloc[0])
+    
+    if reference_counts:
+        reference_count = np.mean(reference_counts)
     else:
         reference_count = 0
 
@@ -183,6 +195,9 @@ def analyze_word(display_name, query_string, interval_hour, span_hour, reference
                     'y': int(row['count'])
                 })
 
+    # 参照時刻として基準時刻の15分前を使用（グラフ表示用）
+    reference_datetime_for_display = reference_base_datetime - timedelta(minutes=15)
+    
     return {
         '作品名': display_name,
         'クエリ': query_string,
@@ -191,7 +206,7 @@ def analyze_word(display_name, query_string, interval_hour, span_hour, reference
         '合計カウント終了時刻': actual_sum_end_datetime.strftime('%Y-%m-%d %H:%M:%S') if actual_sum_end_datetime else 'データなし',
         'chart_data': chart_data,
         'sum_range_data': sum_range_data,
-        'reference_datetime': reference_datetime.strftime('%Y-%m-%d %H:%M:%S'),
+        'reference_datetime': reference_datetime_for_display.strftime('%Y-%m-%d %H:%M:%S'),
         'reference_base_datetime': reference_base_datetime.strftime('%Y-%m-%d %H:%M:%S')
     }
 
@@ -202,9 +217,12 @@ def index():
 
 @app.route('/api/get_queries')
 def get_queries():
-    """デフォルトのクエリ辞書を取得"""
+    """デフォルトのクエリ辞書と基準日時を取得"""
     queries = [{'name': k, 'query': v} for k, v in QUERY_DICT.items()]
-    return jsonify({"queries": queries})
+    return jsonify({
+        "queries": queries,
+        "reference_base_datetime": REFERENCE_BASE_DATETIME
+    })
 
 @app.route('/api/start_analysis', methods=['POST'])
 def start_analysis():
@@ -218,9 +236,10 @@ def start_analysis():
         analysis_progress = {"current": 0, "total": 0, "status": "running", "message": "初期化中..."}
         analysis_results = None
     
-    # リクエストからクエリを取得
+    # リクエストからクエリと基準日時を取得
     data = request.get_json()
     queries = data.get('queries', [])
+    reference_base_datetime = data.get('reference_base_datetime', REFERENCE_BASE_DATETIME)
     
     # クエリが空の場合はデフォルトを使用
     if not queries:
@@ -228,13 +247,13 @@ def start_analysis():
     
     # 別スレッドで解析を実行
     import threading
-    thread = threading.Thread(target=run_analysis, args=(queries,))
+    thread = threading.Thread(target=run_analysis, args=(queries, reference_base_datetime))
     thread.daemon = True
     thread.start()
     
     return jsonify({"message": "Analysis started"})
 
-def run_analysis(queries):
+def run_analysis(queries, reference_base_datetime_str=None):
     """解析を実行（バックグラウンド）"""
     global analysis_results, analysis_progress
     
@@ -244,7 +263,7 @@ def run_analysis(queries):
 
         interval_hour = INTERVAL_HOUR
         span_hour = SPAN_HOUR
-        reference_base_datetime = pd.to_datetime(REFERENCE_BASE_DATETIME)
+        reference_base_datetime = pd.to_datetime(reference_base_datetime_str or REFERENCE_BASE_DATETIME)
 
         analysis_progress["total"] = len(query_dict)
         summary_data = []
@@ -302,6 +321,12 @@ def download_csv():
         as_attachment=True,
         download_name='yahoo_word_analysis_results.csv'
     )
+
+@app.route('/static/images/<path:filename>')
+def serve_image(filename):
+    """画像ファイルを提供する"""
+    images_dir = os.path.join(os.path.dirname(__file__), 'images')
+    return send_from_directory(images_dir, filename)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

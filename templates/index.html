@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Yahoo ワード解析ダッシュボード</title>
+    <title>ジャンプ本誌関連Xポスト数</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
@@ -261,44 +261,62 @@
 
         .query-editor {
             background: white;
-            border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 30px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
         }
 
         .query-editor h2 {
             color: #667eea;
-            margin-bottom: 20px;
+            margin-bottom: 12px;
+            font-size: 1.3em;
         }
 
         .query-list {
-            max-height: 500px;
+            max-height: 300px;
             overflow-y: auto;
         }
 
         .query-item {
             background: #f8f9fa;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 15px;
-            border-left: 4px solid #667eea;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+            border-left: 3px solid #667eea;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .query-item-image {
+            width: 40px;
+            height: 40px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 2px solid #667eea;
+            flex-shrink: 0;
+        }
+
+        .query-item-content {
+            flex: 1;
+            min-width: 0;
         }
 
         .query-item label {
             display: block;
             font-weight: bold;
             color: #333;
-            margin-bottom: 5px;
-            font-size: 0.95em;
+            margin-bottom: 3px;
+            font-size: 0.85em;
         }
 
         .query-item input[type="text"] {
             width: 100%;
-            padding: 10px;
-            border: 2px solid #e0e0e0;
-            border-radius: 5px;
-            font-size: 1em;
+            padding: 6px 8px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            font-size: 0.9em;
             transition: border-color 0.3s;
         }
 
@@ -311,13 +329,16 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 10px;
+            margin-bottom: 4px;
         }
 
         .query-item-name {
             font-weight: bold;
             color: #667eea;
-            font-size: 1.1em;
+            font-size: 0.9em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .btn-small {
@@ -337,20 +358,129 @@
 
         .editor-actions {
             display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .datetime-setting {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+        }
+
+        .datetime-setting h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+
+        .datetime-input {
+            display: flex;
+            align-items: center;
             gap: 10px;
-            margin-top: 20px;
+        }
+
+        .datetime-input input[type="datetime-local"] {
+            padding: 8px 12px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 0.95em;
+            transition: border-color 0.3s;
+        }
+
+        .datetime-input input[type="datetime-local"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .datetime-label {
+            color: #666;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .summary-work-cell {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .summary-work-image {
+            width: 30px;
+            height: 30px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            flex-shrink: 0;
+        }
+
+        .result-title-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .result-title-image {
+            width: 50px;
+            height: 50px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 2px solid #667eea;
+            flex-shrink: 0;
+        }
+
+        .query-checkbox {
+            margin-right: 8px;
+            transform: scale(1.2);
+            cursor: pointer;
+        }
+
+        .query-item.disabled {
+            opacity: 0.5;
+            background: #f0f0f0;
+        }
+
+        .query-item.disabled .query-item-content {
+            pointer-events: none;
+        }
+
+        .select-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+
+        .select-count {
+            color: #667eea;
+            font-weight: bold;
+            font-size: 0.9em;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>📊 Yahoo ワード解析ダッシュボード</h1>
-            <p class="subtitle">ジャンプ作品のSNS反応を可視化・分析</p>
+            <h1>📊 ジャンプ本誌関連Xポスト数</h1>
+        </div>
+
+        <div class="datetime-setting">
+            <h3>📅 基準日時設定</h3>
+            <div class="datetime-input">
+                <span class="datetime-label">基準日時:</span>
+                <input type="datetime-local" id="referenceDatetime" onchange="updateReferenceDateTime()">
+            </div>
         </div>
 
         <div class="query-editor" id="queryEditor">
             <h2>🔍 検索クエリ設定</h2>
+            <div class="select-controls">
+                <button class="btn btn-small" onclick="selectAllQueries()">✓ 全選択</button>
+                <button class="btn btn-small" onclick="deselectAllQueries()">✗ 全解除</button>
+                <span class="select-count" id="selectCount">0/0 作品選択中</span>
+            </div>
             <div class="query-list" id="queryList"></div>
             <div class="editor-actions">
                 <button class="btn btn-secondary" onclick="resetQueries()">🔄 デフォルトに戻す</button>
@@ -385,6 +515,65 @@
     <script>
         let progressInterval = null;
         let currentQueries = [];
+        let currentReferenceDateTime = '';
+        let querySelections = {}; // 各作品の選択状態を保持
+
+        function getImageUrl(queryName) {
+            return `/static/images/${queryName}.jpg`;
+        }
+
+        function updateReferenceDateTime() {
+            const datetimeInput = document.getElementById('referenceDatetime');
+            currentReferenceDateTime = datetimeInput.value;
+        }
+
+        function formatDateTimeForInput(dateTimeStr) {
+            // "YYYY-MM-DD HH:MM:SS" を "YYYY-MM-DDTHH:MM" に変換
+            return dateTimeStr.replace(' ', 'T').slice(0, 16);
+        }
+
+        function updateQuerySelection(index, isSelected) {
+            querySelections[index] = isSelected;
+            updateSelectCount();
+            updateQueryItemVisual(index, isSelected);
+        }
+
+        function updateSelectCount() {
+            const selectedCount = Object.values(querySelections).filter(Boolean).length;
+            const totalCount = currentQueries.length;
+            document.getElementById('selectCount').textContent = `${selectedCount}/${totalCount} 作品選択中`;
+        }
+
+        function updateQueryItemVisual(index, isSelected) {
+            const queryItem = document.querySelector(`[data-query-index="${index}"]`);
+            if (queryItem) {
+                if (isSelected) {
+                    queryItem.classList.remove('disabled');
+                } else {
+                    queryItem.classList.add('disabled');
+                }
+            }
+        }
+
+        function selectAllQueries() {
+            currentQueries.forEach((_, index) => {
+                querySelections[index] = true;
+                const checkbox = document.querySelector(`input[data-checkbox-index="${index}"]`);
+                if (checkbox) checkbox.checked = true;
+                updateQueryItemVisual(index, true);
+            });
+            updateSelectCount();
+        }
+
+        function deselectAllQueries() {
+            currentQueries.forEach((_, index) => {
+                querySelections[index] = false;
+                const checkbox = document.querySelector(`input[data-checkbox-index="${index}"]`);
+                if (checkbox) checkbox.checked = false;
+                updateQueryItemVisual(index, false);
+            });
+            updateSelectCount();
+        }
 
         // ページロード時にデフォルトクエリを取得
         window.addEventListener('DOMContentLoaded', async () => {
@@ -396,6 +585,18 @@
                 const response = await fetch('/api/get_queries');
                 const data = await response.json();
                 currentQueries = data.queries;
+                currentReferenceDateTime = data.reference_base_datetime;
+                
+                // 選択状態を初期化（デフォルトで全選択）
+                querySelections = {};
+                currentQueries.forEach((_, index) => {
+                    querySelections[index] = true;
+                });
+                
+                // 日時入力フィールドにセット
+                const datetimeInput = document.getElementById('referenceDatetime');
+                datetimeInput.value = formatDateTimeForInput(currentReferenceDateTime);
+                
                 renderQueryEditor();
             } catch (error) {
                 console.error('クエリの取得に失敗:', error);
@@ -409,15 +610,27 @@
             currentQueries.forEach((query, index) => {
                 const item = document.createElement('div');
                 item.className = 'query-item';
+                item.setAttribute('data-query-index', index);
+                const imageUrl = getImageUrl(query.name);
+                const isSelected = querySelections[index] !== false; // デフォルトで選択
                 item.innerHTML = `
-                    <div class="query-item-header">
-                        <span class="query-item-name">${query.name}</span>
+                    <input type="checkbox" class="query-checkbox" data-checkbox-index="${index}" 
+                           ${isSelected ? 'checked' : ''} 
+                           onchange="updateQuerySelection(${index}, this.checked)">
+                    <img src="${imageUrl}" alt="${query.name}" class="query-item-image" onerror="this.style.display='none'">
+                    <div class="query-item-content">
+                        <div class="query-item-header">
+                            <span class="query-item-name">${query.name}</span>
+                        </div>
+                        <input type="text" value="${query.query}" data-index="${index}" onchange="updateQuery(${index}, this.value)">
                     </div>
-                    <label>検索クエリ:</label>
-                    <input type="text" value="${query.query}" data-index="${index}" onchange="updateQuery(${index}, this.value)">
                 `;
+                if (!isSelected) {
+                    item.classList.add('disabled');
+                }
                 queryList.appendChild(item);
             });
+            updateSelectCount();
         }
 
         function updateQuery(index, newValue) {
@@ -444,12 +657,25 @@
             downloadBtn.style.display = 'none';
 
             try {
+                // 選択された作品のみフィルタリング
+                const selectedQueries = currentQueries.filter((_, index) => querySelections[index]);
+                
+                if (selectedQueries.length === 0) {
+                    alert('解析する作品を選択してください。');
+                    startBtn.disabled = false;
+                    progressContainer.style.display = 'none';
+                    return;
+                }
+                
                 const response = await fetch('/api/start_analysis', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ queries: currentQueries })
+                    body: JSON.stringify({ 
+                        queries: selectedQueries,
+                        reference_base_datetime: currentReferenceDateTime
+                    })
                 });
 
                 if (!response.ok) {
@@ -517,9 +743,15 @@
                 
                 data.results.forEach((result, index) => {
                     // サマリーテーブルに追加
+                    const imageUrl = getImageUrl(result['作品名']);
                     tableHTML += `
                         <tr>
-                            <td><strong>${result['作品名']}</strong></td>
+                            <td>
+                                <div class="summary-work-cell">
+                                    <img src="${imageUrl}" alt="${result['作品名']}" class="summary-work-image" onerror="this.style.display='none'">
+                                    <strong>${result['作品名']}</strong>
+                                </div>
+                            </td>
                             <td>${result['参照カウント'] !== null ? result['参照カウント'] : 'N/A'}</td>
                             <td>${result['合計カウント'] !== null ? result['合計カウント'].toFixed(2) : 'N/A'}</td>
                             <td>${result['合計カウント終了時刻']}</td>
@@ -531,9 +763,13 @@
                         const card = document.createElement('div');
                         card.className = 'result-card';
                         const chartId = `chart-${index}`;
+                        const imageUrl = getImageUrl(result['作品名']);
                         card.innerHTML = `
                             <div class="result-header">
-                                <div class="result-title">${result['作品名']}</div>
+                                <div class="result-title-container">
+                                    <img src="${imageUrl}" alt="${result['作品名']}" class="result-title-image" onerror="this.style.display='none'">
+                                    <div class="result-title">${result['作品名']}</div>
+                                </div>
                             </div>
                             <div class="result-query">クエリ: ${result['クエリ']}</div>
                             <div class="result-stats">
@@ -589,52 +825,95 @@
                 y: result['参照カウント']
             }));
 
+            // データを時間順にソート
+            const sortedChartData = [...result.chart_data].sort((a, b) => new Date(a.x) - new Date(b.x));
+            
+            // 基準時刻の前後7日の範囲を計算
+            const referenceDate = new Date(result.reference_base_datetime);
+            const sevenDaysMs = 7 * 24 * 60 * 60 * 1000; // 7日をミリ秒に変換
+            const displayStartTime = new Date(referenceDate.getTime() - sevenDaysMs);
+            const displayEndTime = new Date(referenceDate.getTime() + sevenDaysMs);
+            
+            // 表示範囲内のデータをフィルタリング
+            const filteredChartData = sortedChartData.filter(point => {
+                const pointDate = new Date(point.x);
+                return pointDate >= displayStartTime && pointDate <= displayEndTime;
+            });
+            
+            // フィルタリングされたデータがない場合は全データを使用
+            const finalChartData = filteredChartData.length > 0 ? filteredChartData : sortedChartData;
+            
+            // 実際の表示範囲を計算（データの最小・最大値を使用）
+            let actualMinTime, actualMaxTime;
+            if (finalChartData.length > 0) {
+                actualMinTime = new Date(finalChartData[0].x);
+                actualMaxTime = new Date(finalChartData[finalChartData.length - 1].x);
+            } else {
+                actualMinTime = displayStartTime;
+                actualMaxTime = displayEndTime;
+            }
+            
+            // 集計範囲のデータポイントのタイムスタンプを取得
+            const sumRangeTimestamps = new Set();
+            if (result.sum_range_data && result.sum_range_data.length > 0) {
+                result.sum_range_data.forEach(point => {
+                    sumRangeTimestamps.add(point.x);
+                });
+            }
+            
+            // 各データポイントの背景色を動的に設定（フィルタリングされたデータを使用）
+            const backgroundColors = finalChartData.map(point => {
+                if (sumRangeTimestamps.has(point.x)) {
+                    return 'rgba(54, 162, 235, 0.8)'; // 青色（集計範囲）
+                } else {
+                    return 'rgba(128, 128, 128, 0.5)'; // グレー（通常）
+                }
+            });
+            
+            const borderColors = finalChartData.map(point => {
+                if (sumRangeTimestamps.has(point.x)) {
+                    return 'rgba(54, 162, 235, 1)'; // 青色（集計範囲）
+                } else {
+                    return 'rgba(128, 128, 128, 0.8)'; // グレー（通常）
+                }
+            });
+            
             const datasets = [
                 {
-                    label: 'ツイート数',
-                    data: result.chart_data,
-                    borderColor: 'rgb(75, 192, 192)',
-                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                    borderWidth: 2,
-                    fill: false,
-                    tension: 0.1,
-                    pointRadius: 0,
-                    pointHoverRadius: 5
+                    label: 'ポスト数',
+                    data: finalChartData,
+                    backgroundColor: backgroundColors,
+                    borderColor: borderColors,
+                    borderWidth: 1,
+                    maxBarThickness: 20
                 }
             ];
 
-            // 合計領域データがあれば追加
-            if (result.sum_range_data && result.sum_range_data.length > 0) {
-                datasets.push({
-                    label: `合計領域 (値: ${result['合計カウント'].toFixed(2)})`,
-                    data: result.sum_range_data,
-                    backgroundColor: 'rgba(135, 206, 235, 0.4)',
-                    borderColor: 'rgba(135, 206, 235, 0.8)',
-                    borderWidth: 1,
-                    fill: 'origin',
-                    tension: 0.1,
-                    pointRadius: 0
-                });
-            }
-
             new Chart(ctx, {
-                type: 'line',
+                type: 'bar',
                 data: { datasets: datasets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     interaction: {
                         mode: 'index',
-                        intersect: false,
+                        intersect: true,
                     },
                     scales: {
                         x: {
                             type: 'time',
+                            min: actualMinTime,
+                            max: actualMaxTime,
                             time: {
                                 unit: 'hour',
+                                parser: false,
                                 displayFormats: {
                                     hour: 'MM/dd HH:mm'
-                                }
+                                },
+                                tooltipFormat: 'YYYY/MM/DD HH:mm'
+                            },
+                            adapters: {
+                                date: {}
                             },
                             title: {
                                 display: true,
@@ -643,27 +922,27 @@
                             },
                             ticks: {
                                 maxRotation: 45,
-                                minRotation: 45
-                            }
+                                minRotation: 45,
+                                autoSkip: true,
+                                maxTicksLimit: 15
+                            },
+                            offset: false
                         },
                         y: {
                             beginAtZero: true,
                             title: {
                                 display: true,
-                                text: 'ワードカウント',
+                                text: 'ポスト数',
                                 font: { size: 14 }
                             }
                         }
                     },
                     plugins: {
                         title: {
-                            display: true,
-                            text: `Yahooワードカウント「${result['クエリ']}」と合計のハイライト`,
-                            font: { size: 16 }
+                            display: false,
                         },
                         legend: {
-                            display: true,
-                            position: 'top'
+                            display: false,
                         },
                         tooltip: {
                             callbacks: {
@@ -687,24 +966,18 @@
                                     borderWidth: 2,
                                     borderDash: [10, 5],
                                     label: {
-                                        display: true,
-                                        content: `参照カウント: ${result['参照カウント']}`,
-                                        position: 'end',
-                                        backgroundColor: 'rgba(76, 175, 80, 0.8)'
+                                        display: false,
                                     }
                                 },
                                 referenceTimeLine: {
                                     type: 'line',
-                                    xMin: result.reference_datetime,
-                                    xMax: result.reference_datetime,
+                                    xMin: result.reference_base_datetime,
+                                    xMax: result.reference_base_datetime,
                                     borderColor: 'rgb(255, 99, 132)',
                                     borderWidth: 2,
                                     borderDash: [5, 5],
                                     label: {
-                                        display: true,
-                                        content: `参照時刻: ${result.reference_datetime}`,
-                                        position: 'start',
-                                        backgroundColor: 'rgba(255, 99, 132, 0.8)'
+                                        display: false,
                                     }
                                 }
                             }

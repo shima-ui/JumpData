@@ -26,6 +26,22 @@ QUERY_DICT = {
 }
 
 # 解析パラメータ
+from datetime import datetime, timedelta
+
+def get_last_monday():
+    """直近の月曜日の0時を取得"""
+    today = datetime.now()
+    # 今日が月曜日(0)の場合は今日、そうでなければ前の月曜日
+    days_since_monday = today.weekday()  # 0=月曜日, 1=火曜日, ...
+    if days_since_monday == 0:
+        # 今日が月曜日の場合
+        last_monday = today.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        # 前の月曜日を計算
+        last_monday = today - timedelta(days=days_since_monday)
+        last_monday = last_monday.replace(hour=0, minute=0, second=0, microsecond=0)
+    return last_monday.strftime("%Y-%m-%d %H:%M:%S")
+
 INTERVAL_HOUR = 0.25  # 15分間隔
 SPAN_HOUR = 24 * 28  # 28日間
-REFERENCE_BASE_DATETIME = "2025-11-10 00:00:00"  # 参照基準日時
+REFERENCE_BASE_DATETIME = get_last_monday()  # 直近の月曜日の0時

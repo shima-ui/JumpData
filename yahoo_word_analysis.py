@@ -4,12 +4,6 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import requests
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
-import warnings
-import os
-import subprocess
-import matplotlib as mpl
 from config import QUERY_DICT, INTERVAL_HOUR, SPAN_HOUR, REFERENCE_BASE_DATETIME
 
 # --- YahooGateway クラスの定義 ---
@@ -115,17 +109,28 @@ def main():
         # --- 参照点の特定 ---
         # 参照日時計算の基準となる日時を設定
         reference_base_datetime = pd.to_datetime(REFERENCE_BASE_DATETIME)
-        reference_datetime = reference_base_datetime - timedelta(minutes=15)
-        reference_datetime_str = reference_datetime.strftime("%Y-%m-%d %H:%M:%S")
-
-        reference_row = df_yahoo_word_counts[df_yahoo_word_counts['from_date'] == reference_datetime]
-
-        if not reference_row.empty:
-            reference_count = reference_row['count'].iloc[0]
-            print(f"参照日時: {reference_datetime_str}, 参照カウント: {reference_count}")
+        
+        # 1時間前から15分おきに4つのデータポイントを取得
+        reference_times = [
+            reference_base_datetime - timedelta(minutes=60),  # 1時間前
+            reference_base_datetime - timedelta(minutes=45),  # 45分前
+            reference_base_datetime - timedelta(minutes=30),  # 30分前
+            reference_base_datetime - timedelta(minutes=15),  # 15分前
+        ]
+        
+        reference_counts = []
+        for ref_time in reference_times:
+            ref_row = df_yahoo_word_counts[df_yahoo_word_counts['from_date'] == ref_time]
+            if not ref_row.empty:
+                reference_counts.append(ref_row['count'].iloc[0])
+        
+        if reference_counts:
+            reference_count = np.mean(reference_counts)
+            print(f"参照時刻範囲: {reference_times[0].strftime('%H:%M')}-{reference_times[-1].strftime('%H:%M')}")
+            print(f"参照カウント (平均): {reference_count:.2f} (データ数: {len(reference_counts)})")
         else:
-            print(f"参照日時 {reference_datetime_str} はデータに見つかりませんでした。デフォルト値 0 を使用します。")
-            reference_count = 0  # 参照が見つからない場合はAUC計算ができないため0に設定
+            print(f"参照時刻範囲のデータが見つかりませんでした。デフォルト値 0 を使用します。")
+            reference_count = 0
 
         # --- 合計カウントの計算 ---
         df_sum_calculation = df_yahoo_word_counts[df_yahoo_word_counts['from_date'] >= reference_base_datetime].copy()
@@ -186,32 +191,7 @@ def main():
             '合計カウント終了時刻': sum_end_datetime_for_print.strftime('%Y-%m-%d %H:%M:%S') if sum_end_datetime_for_print else 'データなし'
         })
 
-        # --- 可視化 ---
-        plt.figure(figsize=(15, 7))
-        plt.plot(df_yahoo_word_counts['from_date'], df_yahoo_word_counts['count'], label='Yahoo Word Counts')
 
-        # 参照点の垂直線と水平線
-        plt.axvline(x=reference_datetime, color='r', linestyle='--', label=f'参照時刻: {reference_datetime_str}')
-        plt.axhline(y=reference_count, color='g', linestyle='-.', label=f'参照カウント: {reference_count}')
-
-        # 合計カウント領域のハイライト
-        if not df_sum_range.empty:
-            plt.fill_between(
-                df_sum_range['from_date'],
-                df_sum_range['count'],
-                y2=reference_count,
-                where=df_sum_range['count'] > reference_count,
-                color='skyblue', alpha=0.4, label=f'合計領域 (値: {sum_value:.2f})'
-            )
-
-        plt.xlabel('日時')
-        plt.ylabel('ワードカウント')
-        plt.title(f'Yahooワードカウント「{query_string}」と合計のハイライト')
-        plt.xticks(rotation=45, ha='right')
-        plt.legend()
-        plt.grid(True)
-        plt.tight_layout()
-        plt.show()
 
     # ループ終了後、summary_dataからDataFrameを作成し表示
     df_summary = pd.DataFrame(summary_data)

@@ -350,6 +350,46 @@
             margin-bottom: 4px;
         }
 
+        .query-info-section {
+            margin-top: 8px;
+            padding: 8px;
+            background: white;
+            border-radius: 4px;
+            font-size: 0.85em;
+        }
+
+        .query-info-row {
+            margin-bottom: 4px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .query-info-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .query-info-label {
+            font-weight: bold;
+            color: #667eea;
+            min-width: 100px;
+        }
+
+        .query-info-value {
+            color: #333;
+            word-break: break-all;
+            flex: 1;
+        }
+
+        .query-info-value.combined {
+            color: #51cf66;
+            font-weight: bold;
+        }
+
+        .query-info-value.no-trend {
+            color: #999;
+            font-style: italic;
+        }
+
         .query-item-name {
             font-weight: bold;
             color: #667eea;
@@ -746,6 +786,26 @@
             </div>
         </div>
 
+        <div class="query-editor" id="trendEditor">
+            <h2>🔥 トレンドワード設定</h2>
+            <p style="color: #666; margin-bottom: 10px; font-size: 0.9em;">トレンドワードは各作品のクエリに自動追加されます</p>
+            <div class="trend-list" id="trendList">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 10px; text-align: left; border-bottom: 2px solid #667eea;">トレンドワード</th>
+                            <th style="padding: 10px; text-align: left; border-bottom: 2px solid #667eea;">作品名</th>
+                            <th style="padding: 10px; text-align: left; border-bottom: 2px solid #667eea;">最高順位</th>
+                            <th style="padding: 10px; text-align: center; border-bottom: 2px solid #667eea; width: 100px;">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trendTableBody">
+                        <!-- トレンドが動的に追加されます -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <div class="query-editor" id="queryEditor">
             <h2>🔍 検索クエリ設定</h2>
             <div class="select-controls">
@@ -796,8 +856,10 @@
     <script>
         let progressInterval = null;
         let currentQueries = [];
+        let originalQueries = {}; // 元のクエリを保持 {作品名: [クエリ要素のリスト]}
         let currentReferenceIssueNumber = 1;
         let issueDateMapping = {}; // 号数と日付のマッピング
+        let trendWords = []; // トレンドワードのリスト [{word: "", workName: "", rank: ""}]
         let querySelections = {}; // 各作品の選択状態を保持
         let currentResults = null; // 結果データを保持
         let currentReportTab = 'total'; // 現在のレポートタブ
@@ -887,6 +949,7 @@
         // ページロード時にデフォルトクエリを取得
         window.addEventListener('DOMContentLoaded', async () => {
             await loadQueries();
+            renderTrendTable();
         });
 
         async function loadQueries() {
@@ -896,6 +959,18 @@
                 currentQueries = data.queries;
                 currentReferenceIssueNumber = data.reference_issue_number;
                 issueDateMapping = data.issue_date_mapping;
+                
+                // 元のクエリをリストとして保存（サーバーから受け取ったリストを使用）
+                originalQueries = {};
+                currentQueries.forEach(query => {
+                    // サーバーからquery_listが提供されている場合はそれを使用
+                    if (query.query_list && Array.isArray(query.query_list)) {
+                        originalQueries[query.name] = query.query_list;
+                    } else {
+                        // フォールバック: クエリ文字列をパース
+                        originalQueries[query.name] = parseQueryToList(query.query);
+                    }
+                });
                 
                 // 選択状態を初期化（デフォルトで全選択）
                 querySelections = {};
@@ -916,12 +991,57 @@
             const queryList = document.getElementById('queryList');
             queryList.innerHTML = '';
 
+            // トレンドマップを取得
+            const trendMap = getTrendWordsForQuery();
+
             currentQueries.forEach((query, index) => {
                 const item = document.createElement('div');
                 item.className = 'query-item';
                 item.setAttribute('data-query-index', index);
                 const imageUrl = getImageUrl(query.name);
                 const isSelected = querySelections[index] !== false; // デフォルトで選択
+                
+                // この作品に関連するトレンドワードを取得
+                const trends = trendMap[query.name] || [];
+                const hasTrends = trends.length > 0;
+                
+                // 組み合わせたクエリを生成（元のクエリリスト + トレンド）
+                const queryElements = [...(originalQueries[query.name] || [query.query])];
+                if (hasTrends) {
+                    queryElements.push(...trends);
+                }
+                const combinedQuery = buildQueryFromList(queryElements);
+                
+                // トレンド情報表示用のHTML
+                let trendInfoHTML = '';
+                if (hasTrends) {
+                    trendInfoHTML = `
+                        <div class="query-info-section">
+                            <div class="query-info-row">
+                                <span class="query-info-label">元のクエリ:</span>
+                                <span class="query-info-value">${query.query}</span>
+                            </div>
+                            <div class="query-info-row">
+                                <span class="query-info-label">トレンド:</span>
+                                <span class="query-info-value">${trends.join(', ')}</span>
+                            </div>
+                            <div class="query-info-row">
+                                <span class="query-info-label">実行クエリ:</span>
+                                <span class="query-info-value combined">${combinedQuery}</span>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    trendInfoHTML = `
+                        <div class="query-info-section">
+                            <div class="query-info-row">
+                                <span class="query-info-label">トレンド:</span>
+                                <span class="query-info-value no-trend">トレンドワードなし</span>
+                            </div>
+                        </div>
+                    `;
+                }
+                
                 item.innerHTML = `
                     <input type="checkbox" class="query-checkbox" data-checkbox-index="${index}" 
                            ${isSelected ? 'checked' : ''} 
@@ -932,6 +1052,7 @@
                             <span class="query-item-name">${query.name}</span>
                         </div>
                         <input type="text" value="${query.query}" data-index="${index}" onchange="updateQuery(${index}, this.value)">
+                        ${trendInfoHTML}
                     </div>
                 `;
                 if (!isSelected) {
@@ -944,6 +1065,10 @@
 
         function updateQuery(index, newValue) {
             currentQueries[index].query = newValue;
+            // 元のクエリリストも更新
+            originalQueries[currentQueries[index].name] = parseQueryToList(newValue);
+            // クエリエディタを再レンダリング
+            renderQueryEditor();
         }
 
         async function resetQueries() {
@@ -976,13 +1101,32 @@
                     return;
                 }
                 
+                // トレンドワードを各作品のクエリに追加
+                const trendMap = getTrendWordsForQuery();
+                const queriesWithTrends = selectedQueries.map(query => {
+                    const workName = query.name;
+                    const trends = trendMap[workName] || [];
+                    
+                    // 元のクエリリストにトレンドを追加
+                    const queryElements = [...(originalQueries[workName] || [query.query])];
+                    if (trends.length > 0) {
+                        queryElements.push(...trends);
+                    }
+                    const modifiedQuery = buildQueryFromList(queryElements);
+                    
+                    return {
+                        name: query.name,
+                        query: modifiedQuery
+                    };
+                });
+                
                 const response = await fetch('/api/start_analysis', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ 
-                        queries: selectedQueries,
+                        queries: queriesWithTrends,
                         reference_issue_number: currentReferenceIssueNumber
                     })
                 });
@@ -1326,40 +1470,125 @@
                                     return '参照カウント: ' + refCount.toFixed(2);
                                 }
                             }
-                        },
-                        annotation: {
-                            annotations: {
-                                referenceLine: {
-                                    type: 'line',
-                                    yMin: result['参照カウント'],
-                                    yMax: result['参照カウント'],
-                                    borderColor: 'rgb(76, 175, 80)',
-                                    borderWidth: 2,
-                                    borderDash: [10, 5],
-                                    label: {
-                                        display: false,
-                                    }
-                                },
-                                referenceTimeLine: {
-                                    type: 'line',
-                                    xMin: result.reference_base_datetime,
-                                    xMax: result.reference_base_datetime,
-                                    borderColor: 'rgb(255, 99, 132)',
-                                    borderWidth: 2,
-                                    borderDash: [5, 5],
-                                    label: {
-                                        display: false,
-                                    }
-                                }
-                            }
                         }
-                    }
+                    },
                 }
             });
+        }
+        function removeTrend(index) {
+            if (trendWords.length > 1) {
+                if (confirm('このトレンドワードを削除しますか?')) {
+                    trendWords.splice(index, 1);
+                    renderTrendTable();
+                    renderQueryEditor(); // クエリエディタも更新
+                }
+            }
+        }
+        
+        function updateTrend(index, field, value) {
+            trendWords[index][field] = value;
+            
+            // 全ての入力欄が埋まっているかチェック
+            checkAndAddNewRow();
+            
+            // トレンドが変更されたらクエリエディタも更新
+            renderQueryEditor();
+        }
+        
+        function checkAndAddNewRow() {
+            // 全ての行が埋まっているかチェック
+            const allFilled = trendWords.every(trend => 
+                trend.word && trend.word.trim() !== '' &&
+                trend.workName && trend.workName.trim() !== '' &&
+                trend.rank && trend.rank.trim() !== ''
+            );
+            
+            // 全て埋まっていて、かつ最後の行も埋まっている場合は新しい行を追加
+            if (allFilled && trendWords.length > 0) {
+                trendWords.push({ word: '', workName: '', rank: '' });
+                renderTrendTable();
+            }
         }
 
         async function downloadCSV() {
             window.location.href = '/api/download_csv';
+        }
+
+        // トレンドワード管理機能
+        function renderTrendTable() {
+            const tbody = document.getElementById('trendTableBody');
+            tbody.innerHTML = '';
+            
+            // 最低1行は表示する
+            if (trendWords.length === 0) {
+                trendWords.push({ word: '', workName: '', rank: '' });
+            }
+            
+            trendWords.forEach((trend, index) => {
+                const row = document.createElement('tr');
+                row.style.borderBottom = '1px solid #e0e0e0';
+                
+                // 作品名プルダウンの選択肢を生成
+                let workSelectOptions = '<option value="">-- 作品を選択 --</option>';
+                currentQueries.forEach(query => {
+                    const selected = trend.workName === query.name ? 'selected' : '';
+                    workSelectOptions += `<option value="${query.name}" ${selected}>${query.name}</option>`;
+                });
+                
+                row.innerHTML = `
+                    <td style="padding: 10px;">
+                        <input type="text" value="${trend.word}" 
+                               oninput="updateTrend(${index}, 'word', this.value)"
+                               style="width: 100%; padding: 6px; border: 1px solid #e0e0e0; border-radius: 4px;">
+                    </td>
+                    <td style="padding: 10px;">
+                        <select onchange="updateTrend(${index}, 'workName', this.value)"
+                                style="width: 100%; padding: 6px; border: 1px solid #e0e0e0; border-radius: 4px;">
+                            ${workSelectOptions}
+                        </select>
+                    </td>
+                    <td style="padding: 10px;">
+                        <input type="text" value="${trend.rank}" 
+                               oninput="updateTrend(${index}, 'rank', this.value)"
+                               style="width: 100%; padding: 6px; border: 1px solid #e0e0e0; border-radius: 4px;">
+                    </td>
+                    <td style="padding: 10px; text-align: center;">
+                        <button class="btn btn-danger btn-small" onclick="removeTrend(${index})" 
+                                style="${trendWords.length === 1 ? 'visibility: hidden;' : ''}">
+                            削除
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        // クエリ要素のリストからクエリ文字列を作成する関数
+        function buildQueryFromList(queryList) {
+            if (!queryList || queryList.length === 0) return '';
+            if (queryList.length === 1) return queryList[0];
+            return '(' + queryList.join(' ') + ')';
+        }
+        
+        // クエリ文字列をリストに分解する関数
+        function parseQueryToList(queryString) {
+            // 括弧を取り除いてスペースで分割
+            const cleaned = queryString.replace(/^\(+|\)+$/g, '').trim();
+            return cleaned ? [cleaned] : [];
+        }
+        
+        function getTrendWordsForQuery() {
+            // 各作品のクエリに追加するトレンドワードを取得
+            const trendMap = {};
+            trendWords.forEach(trend => {
+                if (trend.word && trend.workName) {
+                    if (!trendMap[trend.workName]) {
+                        trendMap[trend.workName] = [];
+                    }
+                    trendMap[trend.workName].push(trend.word);
+                }
+            });
+            return trendMap;
         }
 
         function renderRanking(sortBy) {

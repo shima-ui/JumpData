@@ -296,10 +296,27 @@ def index():
     """トップページ"""
     return render_template('index.html')
 
+def build_query_from_list(query_list):
+    """クエリ要素のリストからクエリ文字列を作成"""
+    if not query_list or len(query_list) == 0:
+        return ''
+    if len(query_list) == 1:
+        return query_list[0]
+    return '(' + ' '.join(query_list) + ')'
+
 @app.route('/api/get_queries')
 def get_queries():
     """デフォルトのクエリ辞書と基準号数を取得"""
-    queries = [{'name': k, 'query': v} for k, v in QUERY_DICT.items()]
+    # クエリリストを文字列に変換
+    queries = []
+    for k, v in QUERY_DICT.items():
+        if isinstance(v, list):
+            query_string = build_query_from_list(v)
+            queries.append({'name': k, 'query': query_string, 'query_list': v})
+        else:
+            # 後方互換性のため、文字列の場合もサポート
+            queries.append({'name': k, 'query': v, 'query_list': [v]})
+    
     mapping = load_issue_date_mapping()
     
     # タイムゾーン情報を除いて文字列に変換

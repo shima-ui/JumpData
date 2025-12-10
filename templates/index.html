@@ -768,6 +768,92 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
         }
+
+        .rank-trends {
+            margin-top: 12px;
+            padding: 10px;
+            background: rgba(102, 126, 234, 0.05);
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+        }
+
+        .rank-card.rank-1 .rank-trends,
+        .rank-card.rank-2 .rank-trends,
+        .rank-card.rank-3 .rank-trends {
+            background: rgba(255, 255, 255, 0.15);
+            border-left-color: rgba(255, 255, 255, 0.5);
+        }
+
+        .rank-trends-title {
+            font-size: 0.9em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .rank-card.rank-1 .rank-trends-title,
+        .rank-card.rank-2 .rank-trends-title,
+        .rank-card.rank-3 .rank-trends-title {
+            color: rgba(255, 255, 255, 0.9);
+        }
+
+        .rank-trend-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 8px;
+            margin: 4px 0;
+            background: white;
+            border-radius: 6px;
+            font-size: 0.9em;
+        }
+
+        .rank-card.rank-1 .rank-trend-item,
+        .rank-card.rank-2 .rank-trend-item,
+        .rank-card.rank-3 .rank-trend-item {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .rank-trend-word {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .rank-card.rank-1 .rank-trend-word,
+        .rank-card.rank-2 .rank-trend-word,
+        .rank-card.rank-3 .rank-trend-word {
+            color: white;
+        }
+
+        .rank-trend-count {
+            font-weight: bold;
+            color: #667eea;
+            background: rgba(102, 126, 234, 0.1);
+            padding: 3px 10px;
+            border-radius: 12px;
+        }
+
+        .rank-card.rank-1 .rank-trend-count,
+        .rank-card.rank-2 .rank-trend-count,
+        .rank-card.rank-3 .rank-trend-count {
+            color: white;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .rank-trends-empty {
+            font-size: 0.85em;
+            color: #999;
+            font-style: italic;
+        }
+
+        .rank-card.rank-1 .rank-trends-empty,
+        .rank-card.rank-2 .rank-trends-empty,
+        .rank-card.rank-3 .rank-trends-empty {
+            color: rgba(255, 255, 255, 0.6);
+        }
     </style>
 </head>
 <body>
@@ -1005,10 +1091,16 @@
                 const trends = trendMap[query.name] || [];
                 const hasTrends = trends.length > 0;
                 
-                // 組み合わせたクエリを生成（元のクエリリスト + トレンド）
-                const queryElements = [...(originalQueries[query.name] || [query.query])];
-                if (hasTrends) {
-                    queryElements.push(...trends);
+                // 元のクエリリストを取得
+                const originalQueryElements = originalQueries[query.name] || [query.query];
+                
+                // トレンドから元のクエリに含まれていないものだけをフィルタリング（クエリ追加用）
+                const newTrends = trends.filter(trend => !originalQueryElements.includes(trend));
+                
+                // 組み合わせたクエリを生成（元のクエリリスト + 重複していない新しいトレンドのみ）
+                const queryElements = [...originalQueryElements];
+                if (newTrends.length > 0) {
+                    queryElements.push(...newTrends);
                 }
                 const combinedQuery = buildQueryFromList(queryElements);
                 
@@ -1107,10 +1199,16 @@
                     const workName = query.name;
                     const trends = trendMap[workName] || [];
                     
-                    // 元のクエリリストにトレンドを追加
-                    const queryElements = [...(originalQueries[workName] || [query.query])];
-                    if (trends.length > 0) {
-                        queryElements.push(...trends);
+                    // 元のクエリリストを取得
+                    const originalQueryElements = originalQueries[workName] || [query.query];
+                    
+                    // トレンドから元のクエリに含まれていないものだけをフィルタリング
+                    const newTrends = trends.filter(trend => !originalQueryElements.includes(trend));
+                    
+                    // 元のクエリリストに新しいトレンドのみを追加
+                    const queryElements = [...originalQueryElements];
+                    if (newTrends.length > 0) {
+                        queryElements.push(...newTrends);
                     }
                     const modifiedQuery = buildQueryFromList(queryElements);
                     
@@ -1120,13 +1218,23 @@
                     };
                 });
                 
+                // 個々のトレンドワードも解析対象として追加
+                const trendQueries = trendWords.map(trend => ({
+                    name: `[トレンド] ${trend.word}`,
+                    query: trend.word,
+                    isTrend: true  // トレンドフラグを設定
+                }));
+                
+                // 作品のクエリとトレンドのクエリを結合
+                const allQueries = [...queriesWithTrends, ...trendQueries];
+                
                 const response = await fetch('/api/start_analysis', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ 
-                        queries: queriesWithTrends,
+                        queries: allQueries,
                         reference_issue_number: currentReferenceIssueNumber
                     })
                 });
@@ -1193,10 +1301,13 @@
                 resultsContainer.innerHTML = '';
                 currentResults = data.results; // 結果を保存
                 
+                // トレンドでない結果のみをフィルタリング(サマリー用)
+                const workResults = data.results.filter(r => !r.isTrend);
+                
                 // サマリーテーブルを作成
                 let tableHTML = '<thead><tr><th>作品名</th><th>クエリ</th><th>参照カウント</th><th>1時間集計</th><th>全体集計</th><th>終了時刻</th></tr></thead><tbody>';
                 
-                data.results.forEach((result, index) => {
+                workResults.forEach((result, index) => {
                     // サマリーテーブルに追加
                     const imageUrl = getImageUrl(result['作品名']);
                     tableHTML += `
@@ -1214,7 +1325,10 @@
                             <td>${result['全体集計終了時刻']}</td>
                         </tr>
                     `;
-
+                });
+                
+                // 全ての結果に対して詳細カードを作成(トレンド含む)
+                data.results.forEach((result, index) => {
                     // 詳細カードを作成
                     if (result.chart_data) {
                         const card = document.createElement('div');
@@ -1470,6 +1584,53 @@
                                     return '参照カウント: ' + refCount.toFixed(2);
                                 }
                             }
+                        },
+                        annotation: {
+                            annotations: {
+                                // 参照カウントの水平線
+                                referenceCountLine: {
+                                    type: 'line',
+                                    yMin: referenceCount,
+                                    yMax: referenceCount,
+                                    borderColor: 'rgb(76, 175, 80)',
+                                    borderWidth: 2,
+                                    borderDash: [5, 5],
+                                    label: {
+                                        display: true,
+                                        content: `参照カウント: ${referenceCount.toFixed(2)}`,
+                                        position: 'end',
+                                        backgroundColor: 'rgb(76, 175, 80)',
+                                        color: 'white',
+                                        font: {
+                                            size: 11,
+                                            weight: 'bold'
+                                        },
+                                        padding: 4
+                                    }
+                                },
+                                // 基準時刻の垂直線
+                                referenceTimeLine: {
+                                    type: 'line',
+                                    xMin: referenceDate,
+                                    xMax: referenceDate,
+                                    borderColor: 'rgb(255, 99, 132)',
+                                    borderWidth: 2,
+                                    borderDash: [5, 5],
+                                    label: {
+                                        display: true,
+                                        content: '基準時刻',
+                                        position: 'start',
+                                        backgroundColor: 'rgb(255, 99, 132)',
+                                        color: 'white',
+                                        font: {
+                                            size: 11,
+                                            weight: 'bold'
+                                        },
+                                        padding: 4,
+                                        yAdjust: -10
+                                    }
+                                }
+                            }
                         }
                     },
                 }
@@ -1599,8 +1760,14 @@
             
             const sortKey = '全体集計';
             
+            // トレンドでない結果のみをフィルタリング
+            const workResults = currentResults.filter(r => !r.isTrend);
+            
+            // トレンドのみの結果を取得
+            const trendResults = currentResults.filter(r => r.isTrend);
+            
             // データをソート
-            const sortedResults = [...currentResults]
+            const sortedResults = [...workResults]
                 .filter(r => r[sortKey] !== null)
                 .sort((a, b) => b[sortKey] - a[sortKey])
                 .slice(0, 10);
@@ -1612,16 +1779,39 @@
                 card.className = `rank-card rank-${rank}`;
                 
                 const imageUrl = getImageUrl(result['作品名']);
+                const workName = result['作品名'];
+                
+                // この作品に関連するトレンドを取得
+                const relatedTrends = trendWords.filter(t => t.workName === workName);
+                
+                // トレンドのHTML生成
+                let trendsHTML = '';
+                if (relatedTrends.length > 0) {
+                    trendsHTML = '<div class="rank-trends"><div class="rank-trends-title">🔥 トレンドワード</div>';
+                    relatedTrends.forEach(trend => {
+                        // トレンドの解析結果を検索
+                        const trendResult = trendResults.find(r => r['作品名'] === `[トレンド] ${trend.word}`);
+                        const trendCount = trendResult && trendResult[sortKey] !== null ? Math.round(trendResult[sortKey]) : 'N/A';
+                        trendsHTML += `
+                            <div class="rank-trend-item">
+                                <span class="rank-trend-word">${trend.word}</span>
+                                <span class="rank-trend-count">${trendCount}</span>
+                            </div>
+                        `;
+                    });
+                    trendsHTML += '</div>';
+                }
                 
                 card.innerHTML = `
                     <div class="rank-number">${rank}</div>
                     <div class="rank-content">
-                        <img src="${imageUrl}" alt="${result['作品名']}" class="rank-image" onerror="this.style.display='none'">
+                        <img src="${imageUrl}" alt="${workName}" class="rank-image" onerror="this.style.display='none'">
                         <div>
-                            <div class="rank-work-name">${result['作品名']}</div>
+                            <div class="rank-work-name">${workName}</div>
                         </div>
                     </div>
                     <div class="rank-value">${Math.round(result[sortKey])}</div>
+                    ${trendsHTML}
                 `;
                 
                 rankingGrid.appendChild(card);

@@ -368,8 +368,9 @@ def run_analysis(queries, reference_issue_number=None):
     global analysis_results, analysis_progress
     
     try:
-        # クエリをリストから辞書に変換
+        # クエリをリストから辞書に変換し、isTrendフラグも保持
         query_dict = {q['name']: q['query'] for q in queries}
+        trend_flags = {q['name']: q.get('isTrend', False) for q in queries}
 
         interval_hour = INTERVAL_HOUR
         span_hour = SPAN_HOUR
@@ -389,6 +390,8 @@ def run_analysis(queries, reference_issue_number=None):
             analysis_progress["message"] = f"処理中: {display_name}"
             
             result = analyze_word(display_name, query_string, interval_hour, span_hour, reference_base_datetime)
+            # isTrendフラグを結果に追加
+            result['isTrend'] = trend_flags.get(display_name, False)
             summary_data.append(result)
 
         analysis_results = summary_data

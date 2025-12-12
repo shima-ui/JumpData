@@ -350,6 +350,8 @@ def start_analysis():
     data = request.get_json()
     queries = data.get('queries', [])
     reference_issue_number = data.get('reference_issue_number', REFERENCE_ISSUE_NUMBER)
+    trend_words_data = data.get('trend_words', [])  # トレンドワード情報
+    original_queries = data.get('original_queries', {})  # 元のクエリ情報
     
     # クエリが空の場合はデフォルトを使用
     if not queries:
@@ -357,13 +359,13 @@ def start_analysis():
     
     # 別スレッドで解析を実行
     import threading
-    thread = threading.Thread(target=run_analysis, args=(queries, reference_issue_number))
+    thread = threading.Thread(target=run_analysis, args=(queries, reference_issue_number, trend_words_data, original_queries))
     thread.daemon = True
     thread.start()
     
     return jsonify({"message": "Analysis started"})
 
-def run_analysis(queries, reference_issue_number=None):
+def run_analysis(queries, reference_issue_number=None, trend_words_data=None, original_queries=None):
     """解析を実行(バックグラウンド)"""
     global analysis_results, analysis_progress
     
@@ -382,17 +384,96 @@ def run_analysis(queries, reference_issue_number=None):
         if reference_base_datetime is None:
             raise ValueError(f"号数 {reference_issue_number} に対応する日付が見つかりません")
 
-        analysis_progress["total"] = len(query_dict)
-        summary_data = []
+        # トレンドワードマップを作成（作品名 -> トレンドワードリスト）
+        trend_map = {}
+        if trend_words_data:
+            for trend in trend_words_data:
+                work_name = trend.get('workName')
+                trend_word = trend.get('word', '').strip()
+                if work_name and trend_word:
+                    if work_name not in trend_map:
+                        trend_map[work_name] = []
+                    trend_map[work_name].append(trend_word)
+        
+        # 元のクエリ情報がない場合は空の辞書
+        if original_queries is None:
+            original_queries = {}
 
-        for idx, (display_name, query_string) in enumerate(query_dict.items(), 1):
-            analysis_progress["current"] = idx
-            analysis_progress["message"] = f"処理中: {display_name}"
+        # 処理対象を計算（トレンドワードがある作品は2回解析するため）
+        total_tasks = 0
+        for display_name in query_dict.keys():
+            if trend_flags.get(display_name, False):
+                # トレンド専用クエリは1回のみ
+                total_tasks += 1
+            else:
+                # 通常作品
+                trends = trend_map.get(display_name, [])
+                if trends:
+                    # トレンドワードがある場合は2回（元のクエリのみ + トレンド付き）
+                    total_tasks += 2
+                else:
+                    # トレンドワードがない場合は1回
+                    total_tasks += 1
+        
+        analysis_progress["total"] = total_tasks
+        summary_data = []
+        current_task = 0
+
+        for display_name, query_string in query_dict.items():
+            is_trend_query = trend_flags.get(display_name, False)
             
-            result = analyze_word(display_name, query_string, interval_hour, span_hour, reference_base_datetime)
-            # isTrendフラグを結果に追加
-            result['isTrend'] = trend_flags.get(display_name, False)
-            summary_data.append(result)
+            if is_trend_query:
+                # トレンド専用クエリはそのまま1回解析
+                current_task += 1
+                analysis_progress["current"] = current_task
+                analysis_progress["message"] = f"処理中: {display_name}"
+                
+                result = analyze_word(display_name, query_string, interval_hour, span_hour, reference_base_datetime)
+                result['isTrend'] = True
+                summary_data.append(result)
+            else:
+                # 通常の作品クエリ
+                trends = trend_map.get(display_name, [])
+                original_query_elements = original_queries.get(display_name, [query_string])
+                
+                # トレンドワードが元のクエリに含まれているかチェック
+                new_trends = [t for t in trends if t not in original_query_elements]
+                
+                if new_trends:
+                    # トレンドワードがあり、元のクエリに含まれていない場合
+                    # 1. 元のクエリのみで解析
+                    current_task += 1
+                    analysis_progress["current"] = current_task
+                    analysis_progress["message"] = f"処理中: {display_name} (元のクエリ)"
+                    
+                    original_query_string = build_query_from_list(original_query_elements)
+                    result_original = analyze_word(display_name, original_query_string, interval_hour, span_hour, reference_base_datetime)
+                    result_original['isTrend'] = False
+                    result_original['withTrendWord'] = False
+                    result_original['trendWords'] = []
+                    summary_data.append(result_original)
+                    
+                    # 2. トレンドワード付きで解析
+                    current_task += 1
+                    analysis_progress["current"] = current_task
+                    analysis_progress["message"] = f"処理中: {display_name} (トレンド付き)"
+                    
+                    result_with_trend = analyze_word(display_name, query_string, interval_hour, span_hour, reference_base_datetime)
+                    result_with_trend['isTrend'] = False
+                    result_with_trend['withTrendWord'] = True
+                    result_with_trend['trendWords'] = new_trends
+                    summary_data.append(result_with_trend)
+                else:
+                    # トレンドワードがないか、元のクエリに含まれている場合は1回のみ
+                    current_task += 1
+                    analysis_progress["current"] = current_task
+                    analysis_progress["message"] = f"処理中: {display_name}"
+                    
+                    result = analyze_word(display_name, query_string, interval_hour, span_hour, reference_base_datetime)
+                    result['isTrend'] = False
+                    result['withTrendWord'] = False
+                    result['trendWords'] = []
+                    summary_data.append(result)
 
         analysis_results = summary_data
         analysis_progress["status"] = "completed"
@@ -424,25 +505,155 @@ def get_results():
     
     return jsonify({"results": serializable_results})
 
-@app.route('/api/download_csv')
-def download_csv():
-    """CSV形式で結果をダウンロード"""
+@app.route('/api/save_to_csv', methods=['POST'])
+def save_to_csv():
+    """解析結果をCSVデータベースファイルに保存・更新"""
     if analysis_results is None:
         return jsonify({"error": "No results available"}), 404
     
-    # chart_data, range_dataなどのグラフ用データを除外してCSV作成
-    df_results = pd.DataFrame([{k: v for k, v in r.items() if k not in ['chart_data', 'one_hour_range_data', 'after_one_hour_range_data', 'reference_datetime', 'reference_base_datetime']} for r in analysis_results])
-    
-    output = io.StringIO()
-    df_results.to_csv(output, index=False, encoding='utf-8-sig')
-    output.seek(0)
-    
-    return send_file(
-        io.BytesIO(output.getvalue().encode('utf-8-sig')),
-        mimetype='text/csv',
-        as_attachment=True,
-        download_name='yahoo_word_analysis_results.csv'
-    )
+    try:
+        # リクエストから号数とトレンドワード情報を取得
+        data = request.get_json()
+        issue_number = data.get('issue_number', REFERENCE_ISSUE_NUMBER)
+        trend_words_data = data.get('trend_words', [])  # [{word, workName, rank}, ...]
+        
+        # === 作品データの保存 ===
+        csv_filename = 'yahoo_word_analysis_summary.csv'
+        
+        # 新しいデータを準備
+        new_rows = []
+        for result in analysis_results:
+            # isTrendがTrueの場合はスキップ
+            if result.get('isTrend', False):
+                continue
+            
+            # withTrendWordフラグに基づいて作品名を調整
+            work_name = result['作品名']
+            if result.get('withTrendWord', False):
+                # トレンドワード付きバージョン
+                trend_words = result.get('trendWords', [])
+                if trend_words:
+                    trend_suffix = '+'.join(trend_words)
+                    work_name = f"{work_name}+{trend_suffix}"
+                
+            new_row = {
+                '号数': issue_number,
+                '作品名': work_name,
+                'クエリ': result['クエリ'],
+                '参照': result['参照カウント'] if result['参照カウント'] is not None else 0,
+                '1時間': result['1時間集計'] if result['1時間集計'] is not None else 0,
+                '全体': result['全体集計'] if result['全体集計'] is not None else 0,
+                '終了': result['全体集計終了時刻']
+            }
+            new_rows.append(new_row)
+        
+        df_new = pd.DataFrame(new_rows)
+        
+        # 既存のCSVファイルを読み込み、なければ新規作成
+        if os.path.exists(csv_filename) and os.path.getsize(csv_filename) > 0:
+            try:
+                df_existing = pd.read_csv(csv_filename, encoding='utf-8-sig')
+                # 同じ号数と作品名の組み合わせがあれば削除（更新）
+                if len(df_new) > 0 and '作品名' in df_existing.columns:
+                    df_existing = df_existing[
+                        ~((df_existing['号数'] == issue_number) & 
+                          (df_existing['作品名'].isin(df_new['作品名'])))
+                    ]
+            except Exception as e:
+                print(f"Warning: Could not read existing CSV, creating new one: {e}")
+                df_existing = pd.DataFrame(columns=['号数', '作品名', 'クエリ', '参照', '1時間', '全体', '終了'])
+        else:
+            df_existing = pd.DataFrame(columns=['号数', '作品名', 'クエリ', '参照', '1時間', '全体', '終了'])
+        
+        # 新しいデータを追加
+        df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+        
+        # 号数でソート
+        df_combined = df_combined.sort_values(by=['号数', '作品名'], ascending=[True, True])
+        
+        # CSVに保存
+        df_combined.to_csv(csv_filename, index=False, encoding='utf-8-sig')
+        
+        # === トレンドワードデータの保存 ===
+        trend_csv_filename = 'yahoo_trend_analysis_summary.csv'
+        trend_saved_count = 0
+        
+        if trend_words_data:
+            # トレンドワードのマッピングを作成（作品名をキーとする）
+            trend_map = {t['workName']: {'word': t['word'], 'rank': t.get('rank', '')} for t in trend_words_data if t.get('word', '').strip()}
+            
+            # トレンドワードの新しいデータを準備
+            trend_new_rows = []
+            for result in analysis_results:
+                # isTrendがTrueのものだけを処理
+                if result.get('isTrend', False):
+                    work_name = result['作品名']
+                    trend_info = trend_map.get(work_name, {})
+                    
+                    # トレンドワードが空でない場合のみ追加
+                    trend_word = trend_info.get('word', '').strip()
+                    if not trend_word:
+                        continue
+                    
+                    trend_new_row = {
+                        '号数': issue_number,
+                        'トレンドワード': trend_word,
+                        '作品名': work_name,
+                        '順位': trend_info.get('rank', ''),
+                        '参照': result['参照カウント'] if result['参照カウント'] is not None else 0,
+                        '1時間': result['1時間集計'] if result['1時間集計'] is not None else 0,
+                        '全体': result['全体集計'] if result['全体集計'] is not None else 0,
+                        '終了': result['全体集計終了時刻']
+                    }
+                    trend_new_rows.append(trend_new_row)
+            
+            if trend_new_rows:
+                df_trend_new = pd.DataFrame(trend_new_rows)
+                
+                # 既存のトレンドCSVファイルを読み込み、なければ新規作成
+                if os.path.exists(trend_csv_filename) and os.path.getsize(trend_csv_filename) > 0:
+                    try:
+                        df_trend_existing = pd.read_csv(trend_csv_filename, encoding='utf-8-sig')
+                        # 同じ号数とトレンドワード、作品名の組み合わせがあれば削除（更新）
+                        if 'トレンドワード' in df_trend_existing.columns and '作品名' in df_trend_existing.columns:
+                            df_trend_existing = df_trend_existing[
+                                ~((df_trend_existing['号数'] == issue_number) & 
+                                  (df_trend_existing['トレンドワード'].isin(df_trend_new['トレンドワード'])) &
+                                  (df_trend_existing['作品名'].isin(df_trend_new['作品名'])))
+                            ]
+                    except Exception as e:
+                        print(f"Warning: Could not read existing trend CSV, creating new one: {e}")
+                        df_trend_existing = pd.DataFrame(columns=['号数', 'トレンドワード', '作品名', '順位', '参照', '1時間', '全体', '終了'])
+                else:
+                    df_trend_existing = pd.DataFrame(columns=['号数', 'トレンドワード', '作品名', '順位', '参照', '1時間', '全体', '終了'])
+                
+                # 新しいデータを追加
+                df_trend_combined = pd.concat([df_trend_existing, df_trend_new], ignore_index=True)
+                
+                # 号数でソート
+                df_trend_combined = df_trend_combined.sort_values(by=['号数', '作品名', 'トレンドワード'], ascending=[True, True, True])
+                
+                # CSVに保存
+                df_trend_combined.to_csv(trend_csv_filename, index=False, encoding='utf-8-sig')
+                trend_saved_count = len(trend_new_rows)
+        
+        message = f"データを保存しました (作品: {len(new_rows)}件"
+        if trend_saved_count > 0:
+            message += f", トレンド: {trend_saved_count}件"
+        message += ")"
+        
+        return jsonify({
+            "message": message,
+            "issue_number": issue_number,
+            "saved_count": len(new_rows),
+            "trend_saved_count": trend_saved_count
+        })
+        
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"Error saving to CSV: {error_detail}")
+        return jsonify({"error": f"CSV保存エラー: {str(e)}"}), 500
 
 @app.route('/static/images/<path:filename>')
 def serve_image(filename):

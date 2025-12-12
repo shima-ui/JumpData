@@ -62,8 +62,8 @@
             <button class="btn" id="startBtn" onclick="startAnalysis()">
                 🚀 解析開始
             </button>
-            <button class="btn btn-secondary" id="downloadBtn" onclick="downloadCSV()" style="display: none;">
-                📥 CSV ダウンロード
+            <button class="btn btn-secondary" id="saveBtn" onclick="saveToCSV()" style="display: none;">
+                💾 データを保存
             </button>
         </div>
 
@@ -326,14 +326,14 @@
             const progressContainer = document.getElementById('progressContainer');
             const resultsContainer = document.getElementById('resultsContainer');
             const summaryTable = document.getElementById('summaryTable');
-            const downloadBtn = document.getElementById('downloadBtn');
+            const saveBtn = document.getElementById('saveBtn');
 
             startBtn.disabled = true;
             progressContainer.style.display = 'block';
             resultsContainer.style.display = 'none';
             resultsContainer.innerHTML = '';
             summaryTable.style.display = 'none';
-            downloadBtn.style.display = 'none';
+            saveBtn.style.display = 'none';
 
             try {
                 // 選択された作品のみフィルタリング
@@ -388,7 +388,9 @@
                     },
                     body: JSON.stringify({ 
                         queries: allQueries,
-                        reference_issue_number: currentReferenceIssueNumber
+                        reference_issue_number: currentReferenceIssueNumber,
+                        trend_words: trendWords,
+                        original_queries: originalQueries
                     })
                 });
 
@@ -448,78 +450,198 @@
                 const resultsContainer = document.getElementById('resultsContainer');
                 const summaryTable = document.getElementById('summaryTable');
                 const summaryTableContent = document.getElementById('summaryTableContent');
-                const downloadBtn = document.getElementById('downloadBtn');
+                const saveBtn = document.getElementById('saveBtn');
                 const reportBtn = document.getElementById('reportBtn');
 
                 resultsContainer.innerHTML = '';
                 currentResults = data.results; // 結果を保存
                 
-                // トレンドでない結果のみをフィルタリング(サマリー用)
+                // トレンドでない結果のみをフィルタリング
                 const workResults = data.results.filter(r => !r.isTrend);
                 
-                // サマリーテーブルを作成
-                let tableHTML = '<thead><tr><th>作品名</th><th>クエリ</th><th>参照カウント</th><th>1時間集計</th><th>全体集計</th><th>終了時刻</th></tr></thead><tbody>';
+                // 作品名でグループ化（トレンドありとトレンドなしをまとめる）
+                const groupedResults = {};
+                workResults.forEach(result => {
+                    const workName = result['作品名'];
+                    if (!groupedResults[workName]) {
+                        groupedResults[workName] = {
+                            base: null,      // トレンドなし
+                            withTrend: null  // トレンドあり
+                        };
+                    }
+                    if (result.withTrendWord) {
+                        groupedResults[workName].withTrend = result;
+                    } else {
+                        groupedResults[workName].base = result;
+                    }
+                });
                 
-                workResults.forEach((result, index) => {
-                    // サマリーテーブルに追加
-                    const imageUrl = getImageUrl(result['作品名']);
+                // サマリーテーブルを作成
+                let tableHTML = '<thead><tr><th>作品名</th><th>参照</th><th>1時間集計</th><th>全体集計</th><th>終了時刻</th></tr></thead><tbody>';
+                
+                Object.keys(groupedResults).forEach(workName => {
+                    const group = groupedResults[workName];
+                    const baseResult = group.base;
+                    const trendResult = group.withTrend;
+                    
+                    if (!baseResult && !trendResult) return;
+                    
+                    const mainResult = baseResult || trendResult;
+                    const imageUrl = getImageUrl(workName);
+                    const hasTrend = trendResult !== null;
+                    const trendBadge = hasTrend 
+                        ? `<span style="background: #667eea; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-left: 5px;">+${trendResult.trendWords.join('+')}</span>` 
+                        : '';
+                    
+                    // トレンドありの値を優先、なければトレンドなしの値を使用（合計値）
+                    const oneHourTotal = trendResult ? 
+                        (trendResult['1時間集計'] !== null ? Math.round(trendResult['1時間集計']) : 'N/A') :
+                        (baseResult && baseResult['1時間集計'] !== null ? Math.round(baseResult['1時間集計']) : 'N/A');
+                    
+                    const totalTotal = trendResult ? 
+                        (trendResult['全体集計'] !== null ? Math.round(trendResult['全体集計']) : 'N/A') :
+                        (baseResult && baseResult['全体集計'] !== null ? Math.round(baseResult['全体集計']) : 'N/A');
+                    
                     tableHTML += `
                         <tr>
                             <td>
                                 <div class="summary-work-cell">
-                                    <img src="${imageUrl}" alt="${result['作品名']}" class="summary-work-image" onerror="this.style.display='none'">
-                                    <strong>${result['作品名']}</strong>
+                                    <img src="${imageUrl}" alt="${workName}" class="summary-work-image" onerror="this.style.display='none'">
+                                    <strong>${workName}</strong>${trendBadge}
                                 </div>
                             </td>
-                            <td style="font-size: 0.9em; color: #666;">${result['クエリ']}</td>
-                            <td>${result['参照カウント'] !== null ? result['参照カウント'] : 'N/A'}</td>
-                            <td>${result['1時間集計'] !== null ? Math.round(result['1時間集計']) : 'N/A'}</td>
-                            <td>${result['全体集計'] !== null ? Math.round(result['全体集計']) : 'N/A'}</td>
-                            <td>${result['全体集計終了時刻']}</td>
+                            <td>${mainResult['参照カウント'] !== null ? mainResult['参照カウント'] : 'N/A'}</td>
+                            <td>${oneHourTotal}</td>
+                            <td>${totalTotal}</td>
+                            <td>${mainResult['全体集計終了時刻']}</td>
                         </tr>
                     `;
                 });
                 
-                // 全ての結果に対して詳細カードを作成(トレンド含む)
-                data.results.forEach((result, index) => {
-                    // 詳細カードを作成
-                    if (result.chart_data) {
-                        const card = document.createElement('div');
-                        card.className = 'result-card';
-                        const chartId = `chart-${index}`;
-                        const imageUrl = getImageUrl(result['作品名']);
-                        card.innerHTML = `
-                            <div class="result-header">
-                                <div class="result-title-container">
-                                    <img src="${imageUrl}" alt="${result['作品名']}" class="result-title-image" onerror="this.style.display='none'">
-                                    <div class="result-title">${result['作品名']}</div>
-                                </div>
-                            </div>
-                            <div class="result-query">クエリ: ${result['クエリ']}</div>
+                // グループ化された結果でカードを作成
+                Object.keys(groupedResults).forEach((workName, groupIndex) => {
+                    const group = groupedResults[workName];
+                    const baseResult = group.base;
+                    const trendResult = group.withTrend;
+                    
+                    if (!baseResult && !trendResult) return;
+                    
+                    const mainResult = baseResult || trendResult;
+                    if (!mainResult.chart_data) return;
+                    
+                    const card = document.createElement('div');
+                    card.className = 'result-card';
+                    const chartId = `chart-group-${groupIndex}`;
+                    const imageUrl = getImageUrl(workName);
+                    const hasTrend = trendResult !== null;
+                    const trendBadge = hasTrend
+                        ? `<span style="background: #667eea; color: white; padding: 3px 8px; border-radius: 6px; font-size: 0.85em; margin-left: 8px;">+${trendResult.trendWords.join('+')}</span>`
+                        : '';
+                    
+                    // 統計情報の表示
+                    let statsHTML = '';
+                    if (baseResult && trendResult) {
+                        // 両方ある場合
+                        statsHTML = `
                             <div class="result-stats">
                                 <div class="stat-item reference">
                                     <div class="stat-label">参照カウント</div>
-                                    <div class="stat-value">${result['参照カウント'] !== null ? result['参照カウント'] : 'N/A'}</div>
+                                    <div class="stat-value">${mainResult['参照カウント'] !== null ? mainResult['参照カウント'] : 'N/A'}</div>
                                 </div>
                                 <div class="stat-item one-hour">
                                     <div class="stat-label">1時間集計</div>
-                                    <div class="stat-value">${result['1時間集計'] !== null ? Math.round(result['1時間集計']) : 'N/A'}</div>
+                                    <div class="stat-value">
+                                        元: ${baseResult['1時間集計'] !== null ? Math.round(baseResult['1時間集計']) : 'N/A'}<br/>
+                                        <span style="color: #667eea;">+トレンド: ${trendResult['1時間集計'] !== null ? Math.round(trendResult['1時間集計']) : 'N/A'}</span>
+                                    </div>
                                 </div>
                                 <div class="stat-item total">
                                     <div class="stat-label">全体集計</div>
-                                    <div class="stat-value">${result['全体集計'] !== null ? Math.round(result['全体集計']) : 'N/A'}</div>
-                                    <div class="stat-time">終了: ${result['全体集計終了時刻'] ? new Date('1970-01-01 ' + result['全体集計終了時刻'].split(' ')[1]).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : 'N/A'}</div>
+                                    <div class="stat-value">
+                                        元: ${baseResult['全体集計'] !== null ? Math.round(baseResult['全体集計']) : 'N/A'}<br/>
+                                        <span style="color: #667eea;">+トレンド: ${trendResult['全体集計'] !== null ? Math.round(trendResult['全体集計']) : 'N/A'}</span>
+                                    </div>
+                                    <div class="stat-time">終了: ${mainResult['全体集計終了時刻'] ? new Date('1970-01-01 ' + mainResult['全体集計終了時刻'].split(' ')[1]).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : 'N/A'}</div>
                                 </div>
                             </div>
-                            <div class="chart-container">
-                                <canvas id="${chartId}"></canvas>
+                        `;
+                    } else {
+                        // どちらか片方のみ
+                        statsHTML = `
+                            <div class="result-stats">
+                                <div class="stat-item reference">
+                                    <div class="stat-label">参照カウント</div>
+                                    <div class="stat-value">${mainResult['参照カウント'] !== null ? mainResult['参照カウント'] : 'N/A'}</div>
+                                </div>
+                                <div class="stat-item one-hour">
+                                    <div class="stat-label">1時間集計</div>
+                                    <div class="stat-value">${mainResult['1時間集計'] !== null ? Math.round(mainResult['1時間集計']) : 'N/A'}</div>
+                                </div>
+                                <div class="stat-item total">
+                                    <div class="stat-label">全体集計</div>
+                                    <div class="stat-value">${mainResult['全体集計'] !== null ? Math.round(mainResult['全体集計']) : 'N/A'}</div>
+                                    <div class="stat-time">終了: ${mainResult['全体集計終了時刻'] ? new Date('1970-01-01 ' + mainResult['全体集計終了時刻'].split(' ')[1]).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : 'N/A'}</div>
+                                </div>
                             </div>
                         `;
-                        resultsContainer.appendChild(card);
-                        
-                        // Chart.jsでグラフを描画
-                        createChart(chartId, result);
                     }
+                    
+                    card.innerHTML = `
+                        <div class="result-header">
+                            <div class="result-title-container">
+                                <img src="${imageUrl}" alt="${workName}" class="result-title-image" onerror="this.style.display='none'">
+                                <div class="result-title">${workName}${trendBadge}</div>
+                            </div>
+                        </div>
+                        ${statsHTML}
+                        <div class="chart-container">
+                            <canvas id="${chartId}"></canvas>
+                        </div>
+                    `;
+                    resultsContainer.appendChild(card);
+                    
+                    // Chart.jsでグラフを描画（統合版）
+                    createCombinedChart(chartId, baseResult, trendResult);
+                });
+                
+                // トレンド専用の結果も表示
+                const trendOnlyResults = data.results.filter(r => r.isTrend);
+                trendOnlyResults.forEach((result, trendIndex) => {
+                    if (!result.chart_data) return;
+                    
+                    const card = document.createElement('div');
+                    card.className = 'result-card';
+                    const chartId = `chart-trend-${trendIndex}`;
+                    
+                    card.innerHTML = `
+                        <div class="result-header">
+                            <div class="result-title-container">
+                                <div class="result-title" style="color: #667eea;">🔥 ${result['作品名']}</div>
+                            </div>
+                        </div>
+                        <div class="result-stats">
+                            <div class="stat-item reference">
+                                <div class="stat-label">参照カウント</div>
+                                <div class="stat-value">${result['参照カウント'] !== null ? result['参照カウント'] : 'N/A'}</div>
+                            </div>
+                            <div class="stat-item one-hour">
+                                <div class="stat-label">1時間集計</div>
+                                <div class="stat-value">${result['1時間集計'] !== null ? Math.round(result['1時間集計']) : 'N/A'}</div>
+                            </div>
+                            <div class="stat-item total">
+                                <div class="stat-label">全体集計</div>
+                                <div class="stat-value">${result['全体集計'] !== null ? Math.round(result['全体集計']) : 'N/A'}</div>
+                                <div class="stat-time">終了: ${result['全体集計終了時刻'] ? new Date('1970-01-01 ' + result['全体集計終了時刻'].split(' ')[1]).toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}) : 'N/A'}</div>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="${chartId}"></canvas>
+                        </div>
+                    `;
+                    resultsContainer.appendChild(card);
+                    
+                    // 通常のグラフを描画
+                    createChart(chartId, result);
                 });
 
                 tableHTML += '</tbody>';
@@ -531,7 +653,7 @@
                 
                 summaryTable.style.display = 'block';
                 resultsContainer.style.display = 'block';
-                downloadBtn.style.display = 'inline-block';
+                saveBtn.style.display = 'inline-block';
                 document.getElementById('progressContainer').style.display = 'none';
                 document.getElementById('startBtn').disabled = false;
 
@@ -789,6 +911,299 @@
                 }
             });
         }
+
+        function createCombinedChart(chartId, baseResult, trendResult) {
+            const ctx = document.getElementById(chartId).getContext('2d');
+            
+            // 使用する結果データを決定
+            const mainResult = baseResult || trendResult;
+            const referenceCount = mainResult['参照カウント'];
+            const referenceDate = new Date(mainResult.reference_base_datetime);
+            
+            // データを時間順にソート
+            const sortedChartData = [...mainResult.chart_data].sort((a, b) => new Date(a.x) - new Date(b.x));
+            
+            // 基準時刻の前後3日の範囲を計算
+            const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+            const displayStartTime = new Date(referenceDate.getTime() - threeDaysMs);
+            const displayEndTime = new Date(referenceDate.getTime() + threeDaysMs);
+            
+            // 表示範囲内のデータをフィルタリング
+            const filteredChartData = sortedChartData.filter(point => {
+                const pointDate = new Date(point.x);
+                return pointDate >= displayStartTime && pointDate <= displayEndTime;
+            });
+            
+            const finalChartData = filteredChartData.length > 0 ? filteredChartData : sortedChartData;
+            
+            // 実際の表示範囲を計算
+            let actualMinTime, actualMaxTime;
+            if (finalChartData.length > 0) {
+                actualMinTime = new Date(finalChartData[0].x);
+                actualMaxTime = new Date(finalChartData[finalChartData.length - 1].x);
+            } else {
+                actualMinTime = displayStartTime;
+                actualMaxTime = displayEndTime;
+            }
+            
+            // タイムスタンプのマップを作成
+            const baseOneHourTimestamps = new Set();
+            const baseAfterOneHourTimestamps = new Set();
+            const trendOneHourTimestamps = new Set();
+            const trendAfterOneHourTimestamps = new Set();
+            
+            if (baseResult) {
+                if (baseResult.one_hour_range_data) {
+                    baseResult.one_hour_range_data.forEach(point => baseOneHourTimestamps.add(point.x));
+                }
+                if (baseResult.after_one_hour_range_data) {
+                    baseResult.after_one_hour_range_data.forEach(point => baseAfterOneHourTimestamps.add(point.x));
+                }
+            }
+            
+            if (trendResult) {
+                if (trendResult.one_hour_range_data) {
+                    trendResult.one_hour_range_data.forEach(point => trendOneHourTimestamps.add(point.x));
+                }
+                if (trendResult.after_one_hour_range_data) {
+                    trendResult.after_one_hour_range_data.forEach(point => trendAfterOneHourTimestamps.add(point.x));
+                }
+            }
+            
+            // タイムスタンプとデータのマッピング
+            const baseDataMap = new Map();
+            const trendDataMap = new Map();
+            
+            if (baseResult && baseResult.chart_data) {
+                baseResult.chart_data.forEach(point => {
+                    baseDataMap.set(point.x, point.y);
+                });
+            }
+            
+            if (trendResult && trendResult.chart_data) {
+                trendResult.chart_data.forEach(point => {
+                    trendDataMap.set(point.x, point.y);
+                });
+            }
+            
+            // 積み上げデータセットを作成
+            const datasets = [];
+            
+            // レイヤー1: 参照カウント以下（グレー）
+            const lowerSegmentData = finalChartData.map(point => ({
+                x: point.x,
+                y: Math.min(baseDataMap.get(point.x) || 0, referenceCount)
+            }));
+            
+            datasets.push({
+                label: '参照カウント以下',
+                data: lowerSegmentData,
+                backgroundColor: 'rgba(128, 128, 128, 0.5)',
+                borderColor: 'rgba(128, 128, 128, 0.8)',
+                borderWidth: 1,
+                maxBarThickness: 20,
+                stack: 'stack1'
+            });
+            
+            // レイヤー2: 元のクエリの参照カウント超過（水色/青色/グレー）
+            const baseUpperSegmentData = finalChartData.map(point => ({
+                x: point.x,
+                y: Math.max(0, (baseDataMap.get(point.x) || 0) - referenceCount)
+            }));
+            
+            const baseUpperColors = finalChartData.map(point => {
+                if (baseOneHourTimestamps.has(point.x)) {
+                    return 'rgba(54, 162, 235, 0.8)'; // 水色（0〜1時間）
+                } else if (baseAfterOneHourTimestamps.has(point.x)) {
+                    return 'rgba(41, 98, 255, 0.8)'; // 青色（1時間以降）
+                } else {
+                    return 'rgba(128, 128, 128, 0.5)'; // グレー（対象外）
+                }
+            });
+            
+            const baseUpperBorderColors = finalChartData.map(point => {
+                if (baseOneHourTimestamps.has(point.x)) {
+                    return 'rgba(54, 162, 235, 1)';
+                } else if (baseAfterOneHourTimestamps.has(point.x)) {
+                    return 'rgba(41, 98, 255, 1)';
+                } else {
+                    return 'rgba(128, 128, 128, 0.8)';
+                }
+            });
+            
+            datasets.push({
+                label: '元のクエリ',
+                data: baseUpperSegmentData,
+                backgroundColor: baseUpperColors,
+                borderColor: baseUpperBorderColors,
+                borderWidth: 1,
+                maxBarThickness: 20,
+                stack: 'stack1'
+            });
+            
+            // レイヤー3: トレンドワード付きの増加分（紫系の色）
+            if (trendResult) {
+                const trendDiffData = finalChartData.map(point => {
+                    const baseValue = baseDataMap.get(point.x) || 0;
+                    const trendValue = trendDataMap.get(point.x) || 0;
+                    return {
+                        x: point.x,
+                        y: Math.max(0, trendValue - baseValue)
+                    };
+                });
+                
+                const trendDiffColors = finalChartData.map(point => {
+                    if (trendOneHourTimestamps.has(point.x)) {
+                        return 'rgba(153, 102, 255, 0.8)'; // 紫（0〜1時間）
+                    } else if (trendAfterOneHourTimestamps.has(point.x)) {
+                        return 'rgba(102, 51, 204, 0.8)'; // 濃い紫（1時間以降）
+                    } else {
+                        return 'rgba(180, 180, 180, 0.5)'; // 薄いグレー（対象外）
+                    }
+                });
+                
+                const trendDiffBorderColors = finalChartData.map(point => {
+                    if (trendOneHourTimestamps.has(point.x)) {
+                        return 'rgba(153, 102, 255, 1)';
+                    } else if (trendAfterOneHourTimestamps.has(point.x)) {
+                        return 'rgba(102, 51, 204, 1)';
+                    } else {
+                        return 'rgba(180, 180, 180, 0.8)';
+                    }
+                });
+                
+                datasets.push({
+                    label: 'トレンドワード効果',
+                    data: trendDiffData,
+                    backgroundColor: trendDiffColors,
+                    borderColor: trendDiffBorderColors,
+                    borderWidth: 1,
+                    maxBarThickness: 20,
+                    stack: 'stack1'
+                });
+            }
+            
+            new Chart(ctx, {
+                type: 'bar',
+                data: { datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: true,
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            min: actualMinTime,
+                            max: actualMaxTime,
+                            time: {
+                                unit: 'hour',
+                                parser: false,
+                                displayFormats: {
+                                    hour: 'MM/dd HH:mm'
+                                },
+                                tooltipFormat: 'YYYY/MM/DD HH:mm'
+                            },
+                            adapters: {
+                                date: {}
+                            },
+                            title: {
+                                display: true,
+                                text: '日時',
+                                font: { size: 14 }
+                            },
+                            ticks: {
+                                maxRotation: 45,
+                                minRotation: 45,
+                                autoSkip: true,
+                                maxTicksLimit: 15
+                            },
+                            offset: false
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'ポスト数',
+                                font: { size: 14 }
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: false,
+                        },
+                        legend: {
+                            display: true,
+                            position: 'top',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.dataset.label || '';
+                                    const value = context.parsed.y;
+                                    return label + ': ' + Math.round(value);
+                                },
+                                afterLabel: function(context) {
+                                    if (context.datasetIndex === 0) {
+                                        return '参照カウント: ' + referenceCount.toFixed(2);
+                                    }
+                                }
+                            }
+                        },
+                        annotation: {
+                            annotations: {
+                                referenceCountLine: {
+                                    type: 'line',
+                                    yMin: referenceCount,
+                                    yMax: referenceCount,
+                                    borderColor: 'rgb(76, 175, 80)',
+                                    borderWidth: 2,
+                                    borderDash: [5, 5],
+                                    label: {
+                                        display: true,
+                                        content: `参照カウント: ${referenceCount.toFixed(2)}`,
+                                        position: 'end',
+                                        backgroundColor: 'rgb(76, 175, 80)',
+                                        color: 'white',
+                                        font: {
+                                            size: 11,
+                                            weight: 'bold'
+                                        },
+                                        padding: 4
+                                    }
+                                },
+                                referenceTimeLine: {
+                                    type: 'line',
+                                    xMin: referenceDate,
+                                    xMax: referenceDate,
+                                    borderColor: 'rgb(255, 99, 132)',
+                                    borderWidth: 2,
+                                    borderDash: [5, 5],
+                                    label: {
+                                        display: true,
+                                        content: '基準時刻',
+                                        position: 'start',
+                                        backgroundColor: 'rgb(255, 99, 132)',
+                                        color: 'white',
+                                        font: {
+                                            size: 11,
+                                            weight: 'bold'
+                                        },
+                                        padding: 4,
+                                        yAdjust: -10
+                                    }
+                                }
+                            }
+                        }
+                    },
+                }
+            });
+        }
+        
         function removeTrend(index) {
             if (trendWords.length > 1) {
                 if (confirm('このトレンドワードを削除しますか?')) {
@@ -886,8 +1301,43 @@
             });
         }
 
-        async function downloadCSV() {
-            window.location.href = '/api/download_csv';
+        async function saveToCSV() {
+            const saveBtn = document.getElementById('saveBtn');
+            const originalText = saveBtn.innerHTML;
+            
+            try {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '💾 保存中...';
+                
+                const response = await fetch('/api/save_to_csv', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        issue_number: currentReferenceIssueNumber,
+                        trend_words: trendWords  // トレンドワード情報を送信
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alert(`✅ ${data.message}`);
+                    saveBtn.innerHTML = '✓ 保存完了';
+                    setTimeout(() => {
+                        saveBtn.innerHTML = originalText;
+                    }, 2000);
+                } else {
+                    alert(`❌ エラー: ${data.error}`);
+                    saveBtn.innerHTML = originalText;
+                }
+            } catch (error) {
+                alert(`❌ 保存に失敗しました: ${error.message}`);
+                saveBtn.innerHTML = originalText;
+            } finally {
+                saveBtn.disabled = false;
+            }
         }
 
         // トレンドワード管理機能
@@ -980,54 +1430,90 @@
             // トレンドでない結果のみをフィルタリング
             const workResults = currentResults.filter(r => !r.isTrend);
             
-            // トレンドのみの結果を取得
-            const trendResults = currentResults.filter(r => r.isTrend);
+            // 作品名でグループ化（トレンドありとトレンドなしをまとめる）
+            const groupedResults = {};
+            workResults.forEach(result => {
+                const workName = result['作品名'];
+                if (!groupedResults[workName]) {
+                    groupedResults[workName] = {
+                        base: null,      // トレンドなし
+                        withTrend: null  // トレンドあり
+                    };
+                }
+                if (result.withTrendWord) {
+                    groupedResults[workName].withTrend = result;
+                } else {
+                    groupedResults[workName].base = result;
+                }
+            });
             
-            // データをソート
-            const sortedResults = [...workResults]
-                .filter(r => r[sortKey] !== null)
-                .sort((a, b) => b[sortKey] - a[sortKey])
+            // 各作品の合計ツイート数を計算
+            const workSummaries = [];
+            Object.keys(groupedResults).forEach(workName => {
+                const group = groupedResults[workName];
+                const baseResult = group.base;
+                const trendResult = group.withTrend;
+                
+                // トレンドありの値を優先、なければトレンドなしの値を使用
+                const totalCount = trendResult ? 
+                    (trendResult[sortKey] !== null ? trendResult[sortKey] : 0) :
+                    (baseResult && baseResult[sortKey] !== null ? baseResult[sortKey] : 0);
+                
+                const baseCount = baseResult && baseResult[sortKey] !== null ? baseResult[sortKey] : 0;
+                const trendOnlyCount = totalCount - baseCount;
+                
+                workSummaries.push({
+                    workName: workName,
+                    totalCount: totalCount,
+                    baseCount: baseCount,
+                    trendOnlyCount: trendOnlyCount,
+                    hasTrend: trendResult !== null,
+                    trendWords: trendResult ? trendResult.trendWords : []
+                });
+            });
+            
+            // 合計ツイート数でソート
+            const sortedSummaries = workSummaries
+                .filter(s => s.totalCount > 0)
+                .sort((a, b) => b.totalCount - a.totalCount)
                 .slice(0, 10);
             
             // ランキングカードを生成
-            sortedResults.forEach((result, index) => {
+            sortedSummaries.forEach((summary, index) => {
                 const rank = index + 1;
                 const card = document.createElement('div');
                 card.className = `rank-card rank-${rank}`;
                 
-                const imageUrl = getImageUrl(result['作品名']);
-                const workName = result['作品名'];
+                const imageUrl = getImageUrl(summary.workName);
                 
-                // この作品に関連するトレンドを取得
-                const relatedTrends = trendWords.filter(t => t.workName === workName);
-                
-                // トレンドのHTML生成
+                // トレンド情報のHTML生成
                 let trendsHTML = '';
-                if (relatedTrends.length > 0) {
-                    trendsHTML = '<div class="rank-trends"><div class="rank-trends-title">🔥 トレンドワード</div>';
-                    relatedTrends.forEach(trend => {
-                        // トレンドの解析結果を検索
-                        const trendResult = trendResults.find(r => r['作品名'] === `[トレンド] ${trend.word}`);
-                        const trendCount = trendResult && trendResult[sortKey] !== null ? Math.round(trendResult[sortKey]) : 'N/A';
-                        trendsHTML += `
-                            <div class="rank-trend-item">
-                                <span class="rank-trend-word">${trend.word}</span>
-                                <span class="rank-trend-count">${trendCount}</span>
-                            </div>
-                        `;
-                    });
+                if (summary.hasTrend && summary.trendWords.length > 0) {
+                    trendsHTML = '<div class="rank-trends"><div class="rank-trends-title">🔥 トレンド効果</div>';
+                    trendsHTML += `
+                        <div class="rank-trend-item">
+                            <span class="rank-trend-word">${summary.trendWords.join(', ')}</span>
+                            <span class="rank-trend-count">+${Math.round(summary.trendOnlyCount)}</span>
+                        </div>
+                    `;
+                    trendsHTML += `
+                        <div class="rank-trend-item" style="font-size: 0.85em; color: #888;">
+                            <span class="rank-trend-word">元のクエリ</span>
+                            <span class="rank-trend-count">${Math.round(summary.baseCount)}</span>
+                        </div>
+                    `;
                     trendsHTML += '</div>';
                 }
                 
                 card.innerHTML = `
                     <div class="rank-number">${rank}</div>
                     <div class="rank-content">
-                        <img src="${imageUrl}" alt="${workName}" class="rank-image" onerror="this.style.display='none'">
+                        <img src="${imageUrl}" alt="${summary.workName}" class="rank-image" onerror="this.style.display='none'">
                         <div>
-                            <div class="rank-work-name">${workName}</div>
+                            <div class="rank-work-name">${summary.workName}</div>
                         </div>
                     </div>
-                    <div class="rank-value">${Math.round(result[sortKey])}</div>
+                    <div class="rank-value">${Math.round(summary.totalCount)}</div>
                     ${trendsHTML}
                 `;
                 

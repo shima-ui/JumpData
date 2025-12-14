@@ -296,6 +296,40 @@ def index():
     """トップページ"""
     return render_template('index.html')
 
+@app.route('/data')
+def data_viewer():
+    """CSVデータビューアページ"""
+    return render_template('data_viewer.html')
+
+@app.route('/api/get_summary_data')
+def get_summary_data():
+    """保存されたサマリーデータを取得"""
+    try:
+        csv_filename = 'yahoo_word_analysis_summary.csv'
+        if not os.path.exists(csv_filename):
+            return jsonify({"error": "データファイルが見つかりません"}), 404
+        
+        df = pd.read_csv(csv_filename, encoding='utf-8-sig')
+        
+        # DataFrameをJSON形式に変換
+        data = df.to_dict('records')
+        
+        # NumPy/Pandasのデータ型を変換
+        serializable_data = []
+        for row in data:
+            serializable_row = {k: convert_to_serializable(v) for k, v in row.items()}
+            serializable_data.append(serializable_row)
+        
+        return jsonify({
+            "data": serializable_data,
+            "columns": list(df.columns)
+        })
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"Error loading CSV data: {error_detail}")
+        return jsonify({"error": f"データの読み込みに失敗しました: {str(e)}"}), 500
+
 def build_query_from_list(query_list):
     """クエリ要素のリストからクエリ文字列を作成"""
     if not query_list or len(query_list) == 0:

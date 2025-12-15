@@ -330,6 +330,35 @@ def get_summary_data():
         print(f"Error loading CSV data: {error_detail}")
         return jsonify({"error": f"データの読み込みに失敗しました: {str(e)}"}), 500
 
+@app.route('/api/get_trend_data')
+def get_trend_data():
+    """保存されたトレンドデータを取得"""
+    try:
+        csv_filename = 'yahoo_trend_analysis_summary.csv'
+        if not os.path.exists(csv_filename):
+            return jsonify({"data": [], "columns": []})
+        
+        df = pd.read_csv(csv_filename, encoding='utf-8-sig')
+        
+        # DataFrameをJSON形式に変換
+        data = df.to_dict('records')
+        
+        # NumPy/Pandasのデータ型を変換
+        serializable_data = []
+        for row in data:
+            serializable_row = {k: convert_to_serializable(v) for k, v in row.items()}
+            serializable_data.append(serializable_row)
+        
+        return jsonify({
+            "data": serializable_data,
+            "columns": list(df.columns)
+        })
+    except Exception as e:
+        import traceback
+        error_detail = traceback.format_exc()
+        print(f"Error loading trend CSV data: {error_detail}")
+        return jsonify({"error": f"トレンドデータの読み込みに失敗しました: {str(e)}"}), 500
+
 def build_query_from_list(query_list):
     """クエリ要素のリストからクエリ文字列を作成"""
     if not query_list or len(query_list) == 0:
@@ -615,25 +644,31 @@ def save_to_csv():
         
         if trend_words_data:
             # トレンドワードのマッピングを作成（作品名をキーとする）
-            trend_map = {t['workName']: {'word': t['word'], 'rank': t.get('rank', '')} for t in trend_words_data if t.get('word', '').strip()}
+            trend_map = {}
+            for t in trend_words_data:
+                if t.get('word', '').strip() and t.get('workName', '').strip():
+                    trend_map[t['workName']] = {'word': t['word'], 'rank': t.get('rank', '')}
             
             # トレンドワードの新しいデータを準備
             trend_new_rows = []
+            
+            # 作品に紐づいたトレンドワード情報を保存（withTrendWord=Trueの結果から）
             for result in analysis_results:
-                # isTrendがTrueのものだけを処理
-                if result.get('isTrend', False):
+                if result.get('withTrendWord', False) and not result.get('isTrend', False):
                     work_name = result['作品名']
-                    trend_info = trend_map.get(work_name, {})
+                    trend_words_list = result.get('trendWords', [])
                     
-                    # トレンドワードが空でない場合のみ追加
-                    trend_word = trend_info.get('word', '').strip()
+                    # 対応するトレンド情報を取得
+                    trend_info = trend_map.get(work_name, {})
+                    trend_word = '+'.join(trend_words_list) if trend_words_list else trend_info.get('word', '')
+                    
                     if not trend_word:
                         continue
                     
                     trend_new_row = {
                         '号数': issue_number,
-                        'トレンドワード': trend_word,
                         '作品名': work_name,
+                        'トレンドワード': trend_word,
                         '順位': trend_info.get('rank', ''),
                         '参照': result['参照カウント'] if result['参照カウント'] is not None else 0,
                         '1時間': result['1時間集計'] if result['1時間集計'] is not None else 0,
@@ -649,24 +684,23 @@ def save_to_csv():
                 if os.path.exists(trend_csv_filename) and os.path.getsize(trend_csv_filename) > 0:
                     try:
                         df_trend_existing = pd.read_csv(trend_csv_filename, encoding='utf-8-sig')
-                        # 同じ号数とトレンドワード、作品名の組み合わせがあれば削除（更新）
-                        if 'トレンドワード' in df_trend_existing.columns and '作品名' in df_trend_existing.columns:
+                        # 同じ号数と作品名の組み合わせがあれば削除（更新）
+                        if '作品名' in df_trend_existing.columns:
+                            keys_to_remove = df_trend_new[['号数', '作品名']].apply(tuple, axis=1).tolist()
                             df_trend_existing = df_trend_existing[
-                                ~((df_trend_existing['号数'] == issue_number) & 
-                                  (df_trend_existing['トレンドワード'].isin(df_trend_new['トレンドワード'])) &
-                                  (df_trend_existing['作品名'].isin(df_trend_new['作品名'])))
+                                ~df_trend_existing[['号数', '作品名']].apply(tuple, axis=1).isin(keys_to_remove)
                             ]
                     except Exception as e:
                         print(f"Warning: Could not read existing trend CSV, creating new one: {e}")
-                        df_trend_existing = pd.DataFrame(columns=['号数', 'トレンドワード', '作品名', '順位', '参照', '1時間', '全体', '終了'])
+                        df_trend_existing = pd.DataFrame(columns=['号数', '作品名', 'トレンドワード', '順位', '参照', '1時間', '全体', '終了'])
                 else:
-                    df_trend_existing = pd.DataFrame(columns=['号数', 'トレンドワード', '作品名', '順位', '参照', '1時間', '全体', '終了'])
+                    df_trend_existing = pd.DataFrame(columns=['号数', '作品名', 'トレンドワード', '順位', '参照', '1時間', '全体', '終了'])
                 
                 # 新しいデータを追加
                 df_trend_combined = pd.concat([df_trend_existing, df_trend_new], ignore_index=True)
                 
-                # 号数でソート
-                df_trend_combined = df_trend_combined.sort_values(by=['号数', '作品名', 'トレンドワード'], ascending=[True, True, True])
+                # 号数、作品名でソート
+                df_trend_combined = df_trend_combined.sort_values(by=['号数', '作品名'], ascending=[True, True])
                 
                 # CSVに保存
                 df_trend_combined.to_csv(trend_csv_filename, index=False, encoding='utf-8-sig')

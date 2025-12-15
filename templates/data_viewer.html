@@ -189,6 +189,35 @@
         .sort-icon:hover {
             opacity: 1;
         }
+        
+        .data-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .data-tab {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+        }
+        
+        .data-tab:hover {
+            color: #667eea;
+        }
+        
+        .data-tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
     </style>
 </head>
 <body>
@@ -203,6 +232,11 @@
         </div>
         
         <div class="data-container">
+            <div class="data-tabs">
+                <button class="data-tab active" id="tabWork" onclick="switchTab('work')">📊 作品データ</button>
+                <button class="data-tab" id="tabTrend" onclick="switchTab('trend')">📈 トレンドデータ</button>
+            </div>
+            
             <div class="stats-grid" id="statsGrid">
                 <!-- 統計情報が動的に追加されます -->
             </div>
@@ -224,6 +258,8 @@
         let filteredData = [];
         let sortColumn = null;
         let sortDirection = 'asc';
+        let currentTab = 'work'; // 'work' または 'trend'
+        let currentColumns = [];
         
         // ページ読み込み時にデータを取得
         window.addEventListener('DOMContentLoaded', loadData);
@@ -237,9 +273,28 @@
             workFilter.addEventListener('input', applyFilters);
         });
         
+        function switchTab(tab) {
+            currentTab = tab;
+            sortColumn = null;
+            sortDirection = 'asc';
+            
+            // タブのアクティブ状態を更新
+            document.getElementById('tabWork').classList.toggle('active', tab === 'work');
+            document.getElementById('tabTrend').classList.toggle('active', tab === 'trend');
+            
+            // フィルターをリセット
+            document.getElementById('issueFilter').value = '';
+            document.getElementById('workFilter').value = '';
+            
+            loadData();
+        }
+        
         async function loadData() {
             try {
-                const response = await fetch('/api/get_summary_data');
+                document.getElementById('tableContainer').innerHTML = '<div class="loading">データを読み込み中...</div>';
+                
+                const endpoint = currentTab === 'work' ? '/api/get_summary_data' : '/api/get_trend_data';
+                const response = await fetch(endpoint);
                 const result = await response.json();
                 
                 if (!response.ok) {
@@ -249,6 +304,13 @@
                 allData = result.data;
                 filteredData = [...allData];
                 
+                // カラム順を設定
+                if (currentTab === 'work') {
+                    currentColumns = ['作品名', '号数', 'トレンド含む', '1時間', '全体', '参照', 'クエリ', '終了'];
+                } else {
+                    currentColumns = ['作品名', '号数', 'トレンドワード', '順位', '1時間', '全体', '参照', '終了'];
+                }
+                
                 renderStats();
                 renderTable();
             } catch (error) {
@@ -257,11 +319,17 @@
                         ❌ ${error.message}
                     </div>
                 `;
+                document.getElementById('statsGrid').innerHTML = '';
             }
         }
         
         function renderStats() {
             const statsGrid = document.getElementById('statsGrid');
+            
+            if (allData.length === 0) {
+                statsGrid.innerHTML = '';
+                return;
+            }
             
             // 統計情報を計算
             const totalRecords = allData.length;
@@ -269,24 +337,46 @@
             const uniqueWorks = new Set(allData.map(d => d['作品名'])).size;
             const totalTweets = allData.reduce((sum, d) => sum + (d['全体'] || 0), 0);
             
-            statsGrid.innerHTML = `
-                <div class="stat-card">
-                    <div class="stat-value">${totalRecords}</div>
-                    <div class="stat-label">総レコード数</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${uniqueIssues}</div>
-                    <div class="stat-label">号数</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${uniqueWorks}</div>
-                    <div class="stat-label">作品数</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${totalTweets.toLocaleString()}</div>
-                    <div class="stat-label">合計ツイート数</div>
-                </div>
-            `;
+            if (currentTab === 'work') {
+                statsGrid.innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-value">${totalRecords}</div>
+                        <div class="stat-label">総レコード数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${uniqueIssues}</div>
+                        <div class="stat-label">号数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${uniqueWorks}</div>
+                        <div class="stat-label">作品数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${totalTweets.toLocaleString()}</div>
+                        <div class="stat-label">合計ツイート数</div>
+                    </div>
+                `;
+            } else {
+                const uniqueTrends = new Set(allData.map(d => d['トレンドワード'])).size;
+                statsGrid.innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-value">${totalRecords}</div>
+                        <div class="stat-label">総レコード数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${uniqueIssues}</div>
+                        <div class="stat-label">号数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${uniqueTrends}</div>
+                        <div class="stat-label">トレンドワード数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${totalTweets.toLocaleString()}</div>
+                        <div class="stat-label">合計ツイート数</div>
+                    </div>
+                `;
+            }
         }
         
         function applyFilters() {
@@ -341,7 +431,8 @@
                 return;
             }
             
-            const columns = ['号数', '作品名', 'クエリ', '参照', '1時間', '全体', '終了'];
+            // currentColumnsを使用
+            const columns = currentColumns;
             
             let tableHTML = '<table class="data-table"><thead><tr>';
             
@@ -359,13 +450,34 @@
             
             filteredData.forEach(row => {
                 tableHTML += '<tr>';
-                tableHTML += `<td class="number-cell">${row['号数'] || ''}</td>`;
-                tableHTML += `<td class="work-name-cell">${row['作品名'] || ''}</td>`;
-                tableHTML += `<td class="query-cell" title="${row['クエリ'] || ''}">${row['クエリ'] || ''}</td>`;
-                tableHTML += `<td class="number-cell">${row['参照'] !== null && row['参照'] !== undefined ? Math.round(row['参照']) : 'N/A'}</td>`;
-                tableHTML += `<td class="number-cell highlight-number">${row['1時間'] !== null && row['1時間'] !== undefined ? Math.round(row['1時間']).toLocaleString() : 'N/A'}</td>`;
-                tableHTML += `<td class="number-cell highlight-number">${row['全体'] !== null && row['全体'] !== undefined ? Math.round(row['全体']).toLocaleString() : 'N/A'}</td>`;
-                tableHTML += `<td>${row['終了'] || ''}</td>`;
+                columns.forEach(col => {
+                    let value = row[col];
+                    let cellClass = '';
+                    let displayValue = '';
+                    
+                    if (value === null || value === undefined) {
+                        displayValue = 'N/A';
+                    } else if (typeof value === 'number') {
+                        cellClass = 'number-cell';
+                        if (col === '1時間' || col === '全体' || col === '順位') {
+                            cellClass += ' highlight-number';
+                        }
+                        displayValue = Math.round(value).toLocaleString();
+                    } else if (typeof value === 'boolean') {
+                        displayValue = value ? '✓' : '';
+                        cellClass = 'number-cell';
+                    } else if (col === '作品名') {
+                        cellClass = 'work-name-cell';
+                        displayValue = value;
+                    } else if (col === 'クエリ' || col === 'トレンドワード') {
+                        cellClass = 'query-cell';
+                        displayValue = `<span title="${value}">${value}</span>`;
+                    } else {
+                        displayValue = value;
+                    }
+                    
+                    tableHTML += `<td class="${cellClass}">${displayValue}</td>`;
+                });
                 tableHTML += '</tr>';
             });
             
@@ -375,7 +487,8 @@
         }
         
         function exportToCSV() {
-            const columns = ['号数', '作品名', 'クエリ', '参照', '1時間', '全体', '終了'];
+            // currentColumnsを使用
+            const columns = currentColumns;
             
             // CSVヘッダー
             let csv = columns.join(',') + '\n';
@@ -403,8 +516,12 @@
             const link = document.createElement('a');
             const url = URL.createObjectURL(blob);
             
+            const filename = currentTab === 'work' 
+                ? `yahoo_word_analysis_summary_${new Date().getTime()}.csv`
+                : `yahoo_trend_analysis_summary_${new Date().getTime()}.csv`;
+            
             link.setAttribute('href', url);
-            link.setAttribute('download', `yahoo_word_analysis_summary_${new Date().getTime()}.csv`);
+            link.setAttribute('download', filename);
             link.style.visibility = 'hidden';
             document.body.appendChild(link);
             link.click();

@@ -573,12 +573,10 @@ async function loadResults() {
 }
 
 function removeTrend(index) {
-    if (trendWords.length > 1) {
-        if (confirm('このトレンドワードを削除しますか?')) {
-            trendWords.splice(index, 1);
-            renderTrendTable();
-            updateQueryInfoSections(); // クエリ情報のみ更新
-        }
+    if (confirm('このトレンドワードを削除しますか?')) {
+        trendWords.splice(index, 1);
+        renderTrendTable();
+        updateQueryInfoSections(); // クエリ情報のみ更新
     }
 }
 
@@ -587,6 +585,16 @@ function updateTrend(index, field, value) {
     
     // 全ての入力欄が埋まっているかチェック
     checkAndAddNewRow();
+}
+
+function updateTrendRankSlider(index, value) {
+    // スライダーの値を表示に反映
+    const rankValueSpan = document.getElementById(`rankValue-${index}`);
+    if (rankValueSpan) {
+        rankValueSpan.textContent = value;
+    }
+    // データを更新
+    trendWords[index]['rank'] = value;
 }
 
 function updateTrendAndRefresh(index, field, value, shouldCheckNewRow = false) {
@@ -603,18 +611,13 @@ function updateTrendAndRefresh(index, field, value, shouldCheckNewRow = false) {
 }
 
 function checkAndAddNewRow() {
-    // 全ての行が埋まっているかチェック
-    const allFilled = trendWords.every(trend => 
-        trend.word && trend.word.trim() !== '' &&
-        trend.workName && trend.workName.trim() !== '' &&
-        trend.rank && trend.rank.trim() !== ''
-    );
-    
-    // 全て埋まっていて、かつ最後の行も埋まっている場合は新しい行を追加
-    if (allFilled && trendWords.length > 0) {
-        trendWords.push({ word: '', workName: '', rank: '' });
-        renderTrendTable();
-    }
+    // 自動追加は無効化されました。追加ボタンを使用してください。
+}
+
+function addTrendRow() {
+    // 新しいトレンドワード行を追加
+    trendWords.push({ word: '', workName: '', rank: '1' });
+    renderTrendTable();
 }
 
 function updateQueryInfoSections() {
@@ -717,9 +720,16 @@ function renderTrendTable() {
     const tbody = document.getElementById('trendTableBody');
     tbody.innerHTML = '';
     
-    // 最低1行は表示する
+    // トレンドワードがない場合は空のテーブルを表示
     if (trendWords.length === 0) {
-        trendWords.push({ word: '', workName: '', rank: '' });
+        const emptyRow = document.createElement('tr');
+        emptyRow.innerHTML = `
+            <td colspan="4" style="padding: 20px; text-align: center; color: #888;">
+                トレンドワードがありません。「＋ トレンドワードを追加」ボタンをクリックして追加してください。
+            </td>
+        `;
+        tbody.appendChild(emptyRow);
+        return;
     }
     
     trendWords.forEach((trend, index) => {
@@ -747,14 +757,16 @@ function renderTrendTable() {
                 </select>
             </td>
             <td style="padding: 10px;">
-                <input type="text" value="${trend.rank}" 
-                       oninput="updateTrend(${index}, 'rank', this.value)"
-                       onblur="updateTrendAndRefresh(${index}, 'rank', this.value, true)"
-                       style="width: 100%; padding: 6px; border: 1px solid #e0e0e0; border-radius: 4px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <input type="range" min="1" max="50" value="${trend.rank || 1}" 
+                           oninput="updateTrendRankSlider(${index}, this.value)"
+                           onchange="updateTrendAndRefresh(${index}, 'rank', this.value, true)"
+                           style="flex: 1; cursor: pointer;">
+                    <span id="rankValue-${index}" style="min-width: 30px; text-align: center; font-weight: bold;">${trend.rank || 1}</span>
+                </div>
             </td>
             <td style="padding: 10px; text-align: center;">
-                <button class="btn btn-danger btn-small" onclick="removeTrend(${index})" 
-                        style="${trendWords.length === 1 ? 'visibility: hidden;' : ''}">
+                <button class="btn btn-danger btn-small" onclick="removeTrend(${index})">
                     削除
                 </button>
             </td>

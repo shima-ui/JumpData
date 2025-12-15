@@ -60,7 +60,6 @@
 
         <div class="query-editor" id="trendEditor">
             <h2>🔥 トレンドワード設定</h2>
-            <p style="color: #666; margin-bottom: 10px; font-size: 0.9em;">トレンドワードは各作品のクエリに自動追加されます</p>
             <div class="trend-list" id="trendList">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead>
@@ -75,6 +74,11 @@
                         <!-- トレンドが動的に追加されます -->
                     </tbody>
                 </table>
+                <div style="margin-top: 15px; text-align: center;">
+                    <button class="btn" onclick="addTrendRow()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        ➕ トレンドワードを追加
+                    </button>
+                </div>
             </div>
         </div>
 

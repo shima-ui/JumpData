@@ -561,18 +561,14 @@ def save_to_csv():
             if result.get('isTrend', False):
                 continue
             
-            # withTrendWordフラグに基づいて作品名を調整
+            # トレンドワード付きバージョンかどうかを判定
             work_name = result['作品名']
-            if result.get('withTrendWord', False):
-                # トレンドワード付きバージョン
-                trend_words = result.get('trendWords', [])
-                if trend_words:
-                    trend_suffix = '+'.join(trend_words)
-                    work_name = f"{work_name}+{trend_suffix}"
+            has_trend = result.get('withTrendWord', False)
                 
             new_row = {
                 '号数': issue_number,
                 '作品名': work_name,
+                'トレンド含む': has_trend,  # True/False
                 'クエリ': result['クエリ'],
                 '参照': result['参照カウント'] if result['参照カウント'] is not None else 0,
                 '1時間': result['1時間集計'] if result['1時間集計'] is not None else 0,
@@ -587,23 +583,28 @@ def save_to_csv():
         if os.path.exists(csv_filename) and os.path.getsize(csv_filename) > 0:
             try:
                 df_existing = pd.read_csv(csv_filename, encoding='utf-8-sig')
-                # 同じ号数と作品名の組み合わせがあれば削除（更新）
+                # 同じ号数、作品名、トレンド含むの組み合わせがあれば削除（更新）
                 if len(df_new) > 0 and '作品名' in df_existing.columns:
+                    # トレンド含むカラムがない場合は追加
+                    if 'トレンド含む' not in df_existing.columns:
+                        df_existing['トレンド含む'] = False
+                    
+                    # 複合キーで削除
+                    keys_to_remove = df_new[['号数', '作品名', 'トレンド含む']].apply(tuple, axis=1).tolist()
                     df_existing = df_existing[
-                        ~((df_existing['号数'] == issue_number) & 
-                          (df_existing['作品名'].isin(df_new['作品名'])))
+                        ~df_existing[['号数', '作品名', 'トレンド含む']].apply(tuple, axis=1).isin(keys_to_remove)
                     ]
             except Exception as e:
                 print(f"Warning: Could not read existing CSV, creating new one: {e}")
-                df_existing = pd.DataFrame(columns=['号数', '作品名', 'クエリ', '参照', '1時間', '全体', '終了'])
+                df_existing = pd.DataFrame(columns=['号数', '作品名', 'トレンド含む', 'クエリ', '参照', '1時間', '全体', '終了'])
         else:
-            df_existing = pd.DataFrame(columns=['号数', '作品名', 'クエリ', '参照', '1時間', '全体', '終了'])
+            df_existing = pd.DataFrame(columns=['号数', '作品名', 'トレンド含む', 'クエリ', '参照', '1時間', '全体', '終了'])
         
         # 新しいデータを追加
         df_combined = pd.concat([df_existing, df_new], ignore_index=True)
         
-        # 号数でソート
-        df_combined = df_combined.sort_values(by=['号数', '作品名'], ascending=[True, True])
+        # 号数、作品名、トレンド含む（False→True順）でソート
+        df_combined = df_combined.sort_values(by=['号数', '作品名', 'トレンド含む'], ascending=[True, True, True])
         
         # CSVに保存
         df_combined.to_csv(csv_filename, index=False, encoding='utf-8-sig')

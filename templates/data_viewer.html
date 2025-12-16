@@ -267,6 +267,7 @@
             <div class="data-tabs">
                 <button class="data-tab active" id="tabWork" onclick="switchTab('work')">📊 作品データ</button>
                 <button class="data-tab" id="tabTrend" onclick="switchTab('trend')">📈 トレンドデータ</button>
+                <button class="data-tab" id="tabIssue" onclick="switchTab('issue')">📖 号別データ</button>
             </div>
             
             <div class="stats-grid" id="statsGrid">
@@ -276,6 +277,19 @@
             <div id="workRankingSection" style="display: none; margin-bottom: 30px;">
                 <h3 style="color: #667eea; margin-bottom: 15px;">📊 作品集計ランキング</h3>
                 <div id="workDataRanking" style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
+            </div>
+            
+            <div id="issueSection" style="display: none; margin-bottom: 30px;">
+                <h3 style="color: #667eea; margin-bottom: 20px;">📖 号別TOP10</h3>
+                <div style="margin-bottom: 20px;">
+                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">号数選択:</label>
+                    <select id="issueSelect" onchange="updateIssueRanking()" style="width: 100%; max-width: 400px; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        <option value="">号数を選択してください</option>
+                    </select>
+                </div>
+                <div id="issueRankingContainer" style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); min-height: 300px; display: flex; align-items: center; justify-content: center;">
+                    <p style="color: #888; font-size: 14px;">号数を選択してください</p>
+                </div>
             </div>
             
             <div id="chartsSection" style="display: none; margin-bottom: 30px;">
@@ -344,6 +358,7 @@
             // タブのアクティブ状態を更新
             document.getElementById('tabWork').classList.toggle('active', tab === 'work');
             document.getElementById('tabTrend').classList.toggle('active', tab === 'trend');
+            document.getElementById('tabIssue').classList.toggle('active', tab === 'issue');
             
             // フィルターをリセット
             document.getElementById('issueFilter').value = '';
@@ -356,7 +371,15 @@
             try {
                 document.getElementById('tableContainer').innerHTML = '<div class="loading">データを読み込み中...</div>';
                 
-                const endpoint = currentTab === 'work' ? '/api/get_summary_data' : '/api/get_trend_data';
+                let endpoint;
+                if (currentTab === 'work') {
+                    endpoint = '/api/get_summary_data';
+                } else if (currentTab === 'trend') {
+                    endpoint = '/api/get_trend_data';
+                } else if (currentTab === 'issue') {
+                    endpoint = '/api/get_summary_data';
+                }
+                
                 const response = await fetch(endpoint);
                 const result = await response.json();
                 
@@ -370,13 +393,16 @@
                 // カラム順を設定
                 if (currentTab === 'work') {
                     currentColumns = ['作品名', '号数', 'トレンド含む', '1時間', '全体', '参照', 'クエリ', '終了'];
-                } else {
+                } else if (currentTab === 'trend') {
                     currentColumns = ['作品名', '号数', 'トレンドワード', '順位', '1時間', '全体', '参照', '終了'];
+                } else if (currentTab === 'issue') {
+                    currentColumns = ['作品名', '号数', 'トレンド含む', '1時間', '全体', '参照', 'クエリ', '終了'];
                 }
                 
                 renderStats();
                 renderRankings();
                 renderCharts();
+                renderIssueSection();
                 renderTable();
             } catch (error) {
                 document.getElementById('tableContainer').innerHTML = `
@@ -421,7 +447,7 @@
                         <div class="stat-label">合計ツイート数</div>
                     </div>
                 `;
-            } else {
+            } else if (currentTab === 'trend') {
                 const uniqueTrends = new Set(allData.map(d => d['トレンドワード'])).size;
                 statsGrid.innerHTML = `
                     <div class="stat-card">
@@ -435,6 +461,25 @@
                     <div class="stat-card">
                         <div class="stat-value">${uniqueTrends}</div>
                         <div class="stat-label">トレンドワード数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${totalTweets.toLocaleString()}</div>
+                        <div class="stat-label">合計ツイート数</div>
+                    </div>
+                `;
+            } else if (currentTab === 'issue') {
+                statsGrid.innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-value">${totalRecords}</div>
+                        <div class="stat-label">総レコード数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${uniqueIssues}</div>
+                        <div class="stat-label">号数</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${uniqueWorks}</div>
+                        <div class="stat-label">作品数</div>
                     </div>
                     <div class="stat-card">
                         <div class="stat-value">${totalTweets.toLocaleString()}</div>
@@ -797,6 +842,76 @@
                     }
                 }
             });
+        }
+        
+        function renderIssueSection() {
+            const issueSection = document.getElementById('issueSection');
+            
+            if (currentTab !== 'issue' || allData.length === 0) {
+                issueSection.style.display = 'none';
+                return;
+            }
+            
+            issueSection.style.display = 'block';
+            
+            // 号数のリストを取得
+            const issues = [...new Set(allData.map(d => d['号数']))].sort((a, b) => a - b);
+            
+            // セレクトボックスを更新
+            const issueSelect = document.getElementById('issueSelect');
+            issueSelect.innerHTML = '<option value="">号数を選択してください</option>';
+            issues.forEach(issue => {
+                const option = document.createElement('option');
+                option.value = issue;
+                option.textContent = `${issue}号`;
+                issueSelect.appendChild(option);
+            });
+        }
+        
+        function updateIssueRanking() {
+            const issueSelect = document.getElementById('issueSelect');
+            const selectedIssue = issueSelect.value;
+            const container = document.getElementById('issueRankingContainer');
+            
+            if (!selectedIssue) {
+                container.innerHTML = '<p style="color: #888; font-size: 14px;">号数を選択してください</p>';
+                return;
+            }
+            
+            // 選択された号のデータを抽出
+            const issueData = allData.filter(row => row['号数'] == selectedIssue);
+            
+            if (issueData.length === 0) {
+                container.innerHTML = '<p style="color: #888; font-size: 14px;">データがありません</p>';
+                return;
+            }
+            
+            // 全体ツイート数でソートしてTOP10を取得
+            const top10 = issueData
+                .sort((a, b) => (b['全体'] || 0) - (a['全体'] || 0))
+                .slice(0, 10);
+            
+            // ランキング表示
+            let rankingHTML = '<table style="width: 100%; border-collapse: collapse;">';
+            rankingHTML += '<thead><tr style="border-bottom: 2px solid #e0e0e0;"><th style="text-align: left; padding: 8px;">順位</th><th style="text-align: left; padding: 8px;">作品名</th><th style="text-align: right; padding: 8px;">1時間</th><th style="text-align: right; padding: 8px;">全体</th><th style="text-align: left; padding: 8px;">トレンド</th></tr></thead><tbody>';
+            
+            top10.forEach((item, index) => {
+                const rank = index + 1;
+                const medal = rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : `${rank}`;
+                const trendStatus = item['トレンド含む'] ? '✓' : '';
+                rankingHTML += `
+                    <tr style="border-bottom: 1px solid #f0f0f0;">
+                        <td style="padding: 10px; font-weight: bold; color: #667eea;">${medal}</td>
+                        <td style="padding: 10px; font-weight: 600;">${item['作品名']}</td>
+                        <td style="padding: 10px; text-align: right; color: #888;">${Math.round(item['1時間'] || 0).toLocaleString()}</td>
+                        <td style="padding: 10px; text-align: right; font-weight: 600;">${Math.round(item['全体'] || 0).toLocaleString()}</td>
+                        <td style="padding: 10px; text-align: center; color: #667eea;">${trendStatus}</td>
+                    </tr>
+                `;
+            });
+            rankingHTML += '</tbody></table>';
+            
+            container.innerHTML = rankingHTML;
         }
         
         function applyFilters() {

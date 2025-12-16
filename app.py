@@ -462,7 +462,7 @@ def run_analysis(queries, reference_issue_number=None, trend_words_data=None, or
         if original_queries is None:
             original_queries = {}
 
-        # 処理対象を計算（トレンドワードがある作品は2回解析するため）
+        # 処理対象を計算
         total_tasks = 0
         for display_name in query_dict.keys():
             if trend_flags.get(display_name, False):
@@ -471,9 +471,16 @@ def run_analysis(queries, reference_issue_number=None, trend_words_data=None, or
             else:
                 # 通常作品
                 trends = trend_map.get(display_name, [])
+                original_query_elements = original_queries.get(display_name, [query_dict[display_name]])
+                new_trends = [t for t in trends if t not in original_query_elements]
+                
                 if trends:
-                    # トレンドワードがある場合は2回（元のクエリのみ + トレンド付き）
-                    total_tasks += 2
+                    if new_trends:
+                        # トレンドワードが元のクエリに含まれていない場合: 元のクエリ + トレンド付き + 個別取得
+                        total_tasks += 2 + len(trends)
+                    else:
+                        # トレンドワードが元のクエリに含まれている場合: 作品データ1回 + 個別取得
+                        total_tasks += 1 + len(trends)
                 else:
                     # トレンドワードがない場合は1回
                     total_tasks += 1
@@ -497,37 +504,64 @@ def run_analysis(queries, reference_issue_number=None, trend_words_data=None, or
             else:
                 # 通常の作品クエリ
                 trends = trend_map.get(display_name, [])
-                original_query_elements = original_queries.get(display_name, [query_string])
+                original_query_elements = original_queries.get(display_name, [query_dict[display_name]])
                 
                 # トレンドワードが元のクエリに含まれているかチェック
                 new_trends = [t for t in trends if t not in original_query_elements]
                 
-                if new_trends:
-                    # トレンドワードがあり、元のクエリに含まれていない場合
-                    # 1. 元のクエリのみで解析
-                    current_task += 1
-                    analysis_progress["current"] = current_task
-                    analysis_progress["message"] = f"処理中: {display_name} (元のクエリ)"
+                if trends:
+                    # トレンドワードがある場合（元クエリに含まれているかどうかに関わらず）
+                    if new_trends:
+                        # 1. 元のクエリのみで解析（トレンドワードが元クエリに含まれていない場合）
+                        current_task += 1
+                        analysis_progress["current"] = current_task
+                        analysis_progress["message"] = f"処理中: {display_name} (元のクエリ)"
+                        
+                        original_query_string = build_query_from_list(original_query_elements)
+                        result_original = analyze_word(display_name, original_query_string, interval_hour, span_hour, reference_base_datetime)
+                        result_original['isTrend'] = False
+                        result_original['withTrendWord'] = False
+                        result_original['trendWords'] = []
+                        summary_data.append(result_original)
+                        
+                        # 2. トレンドワード付きで解析
+                        current_task += 1
+                        analysis_progress["current"] = current_task
+                        analysis_progress["message"] = f"処理中: {display_name} (トレンド付き)"
+                        
+                        result_with_trend = analyze_word(display_name, query_string, interval_hour, span_hour, reference_base_datetime)
+                        result_with_trend['isTrend'] = False
+                        result_with_trend['withTrendWord'] = True
+                        result_with_trend['trendWords'] = new_trends
+                        summary_data.append(result_with_trend)
+                    else:
+                        # トレンドワードが元のクエリに含まれている場合は、作品データは1回のみ
+                        current_task += 1
+                        analysis_progress["current"] = current_task
+                        analysis_progress["message"] = f"処理中: {display_name}"
+                        
+                        result = analyze_word(display_name, query_string, interval_hour, span_hour, reference_base_datetime)
+                        result['isTrend'] = False
+                        result['withTrendWord'] = True  # トレンド含むとしてマーク
+                        result['trendWords'] = trends  # 全トレンドワードを記録
+                        summary_data.append(result)
                     
-                    original_query_string = build_query_from_list(original_query_elements)
-                    result_original = analyze_word(display_name, original_query_string, interval_hour, span_hour, reference_base_datetime)
-                    result_original['isTrend'] = False
-                    result_original['withTrendWord'] = False
-                    result_original['trendWords'] = []
-                    summary_data.append(result_original)
-                    
-                    # 2. トレンドワード付きで解析
-                    current_task += 1
-                    analysis_progress["current"] = current_task
-                    analysis_progress["message"] = f"処理中: {display_name} (トレンド付き)"
-                    
-                    result_with_trend = analyze_word(display_name, query_string, interval_hour, span_hour, reference_base_datetime)
-                    result_with_trend['isTrend'] = False
-                    result_with_trend['withTrendWord'] = True
-                    result_with_trend['trendWords'] = new_trends
-                    summary_data.append(result_with_trend)
+                    # 3. トレンドワード個別の解析（元クエリに含まれているかどうかに関わらず）
+                    for trend_word in trends:
+                        current_task += 1
+                        analysis_progress["current"] = current_task
+                        analysis_progress["message"] = f"処理中: {display_name} ({trend_word})"
+                        
+                        # トレンドワード単体でクエリを構築
+                        trend_single_query = build_query_from_list([trend_word])
+                        result_trend_single = analyze_word(display_name, trend_single_query, interval_hour, span_hour, reference_base_datetime)
+                        result_trend_single['isTrend'] = False
+                        result_trend_single['withTrendWord'] = True
+                        result_trend_single['trendWords'] = [trend_word]
+                        result_trend_single['isTrendIndividual'] = True  # 個別取得フラグ
+                        summary_data.append(result_trend_single)
                 else:
-                    # トレンドワードがないか、元のクエリに含まれている場合は1回のみ
+                    # トレンドワードがない場合は1回のみ
                     current_task += 1
                     analysis_progress["current"] = current_task
                     analysis_progress["message"] = f"処理中: {display_name}"
@@ -586,8 +620,8 @@ def save_to_csv():
         # 新しいデータを準備
         new_rows = []
         for result in analysis_results:
-            # isTrendがTrueの場合はスキップ
-            if result.get('isTrend', False):
+            # isTrendがTrueまたはisTrendIndividualがTrueの場合はスキップ（作品データには含めない）
+            if result.get('isTrend', False) or result.get('isTrendIndividual', False):
                 continue
             
             # トレンドワード付きバージョンかどうかを判定
@@ -643,33 +677,42 @@ def save_to_csv():
         trend_saved_count = 0
         
         if trend_words_data:
-            # トレンドワードのマッピングを作成（作品名をキーとする）
-            trend_map = {}
+            # トレンドワードのランク情報を作成（作品名 -> {word, rank}）
+            trend_rank_map = {}
             for t in trend_words_data:
                 if t.get('word', '').strip() and t.get('workName', '').strip():
-                    trend_map[t['workName']] = {'word': t['word'], 'rank': t.get('rank', '')}
+                    work_name = t['workName']
+                    if work_name not in trend_rank_map:
+                        trend_rank_map[work_name] = []
+                    trend_rank_map[work_name].append({'word': t['word'], 'rank': t.get('rank', '')})
             
             # トレンドワードの新しいデータを準備
             trend_new_rows = []
             
-            # 作品に紐づいたトレンドワード情報を保存（withTrendWord=Trueの結果から）
+            # トレンドワード個別取得の結果を保存（isTrendIndividual=Trueの結果から）
             for result in analysis_results:
-                if result.get('withTrendWord', False) and not result.get('isTrend', False):
+                if result.get('isTrendIndividual', False):
                     work_name = result['作品名']
                     trend_words_list = result.get('trendWords', [])
                     
-                    # 対応するトレンド情報を取得
-                    trend_info = trend_map.get(work_name, {})
-                    trend_word = '+'.join(trend_words_list) if trend_words_list else trend_info.get('word', '')
-                    
-                    if not trend_word:
+                    if not trend_words_list or len(trend_words_list) != 1:
                         continue
+                    
+                    trend_word = trend_words_list[0]
+                    
+                    # 対応するランク情報を取得
+                    rank_info_list = trend_rank_map.get(work_name, [])
+                    rank = ''
+                    for info in rank_info_list:
+                        if info['word'] == trend_word:
+                            rank = info['rank']
+                            break
                     
                     trend_new_row = {
                         '号数': issue_number,
                         '作品名': work_name,
                         'トレンドワード': trend_word,
-                        '順位': trend_info.get('rank', ''),
+                        '順位': rank,
                         '参照': result['参照カウント'] if result['参照カウント'] is not None else 0,
                         '1時間': result['1時間集計'] if result['1時間集計'] is not None else 0,
                         '全体': result['全体集計'] if result['全体集計'] is not None else 0,

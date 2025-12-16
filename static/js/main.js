@@ -381,9 +381,8 @@ async function loadResults() {
             }
         });
         
-        // サマリーテーブルを作成
-        let tableHTML = '<thead><tr><th>作品名</th><th>参照</th><th>1時間集計</th><th>全体集計</th><th>終了時刻</th></tr></thead><tbody>';
-        
+        // サマリーテーブル用のデータを準備
+        const summaryData = [];
         Object.keys(groupedResults).forEach(workName => {
             const group = groupedResults[workName];
             const baseResult = group.base;
@@ -392,36 +391,33 @@ async function loadResults() {
             if (!baseResult && !trendResult) return;
             
             const mainResult = baseResult || trendResult;
-            const imageUrl = getImageUrl(workName);
             const hasTrend = trendResult !== null;
-            const trendBadge = hasTrend 
-                ? `<span style="background: #667eea; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-left: 5px;">+${trendResult.trendWords.join('+')}</span>` 
-                : '';
             
             // トレンドありの値を優先、なければトレンドなしの値を使用（合計値）
-            const oneHourTotal = trendResult ? 
-                (trendResult['1時間集計'] !== null ? Math.round(trendResult['1時間集計']) : 'N/A') :
-                (baseResult && baseResult['1時間集計'] !== null ? Math.round(baseResult['1時間集計']) : 'N/A');
+            const reference = mainResult['参照カウント'] !== null ? mainResult['参照カウント'] : 0;
+            const oneHour = trendResult ? 
+                (trendResult['1時間集計'] !== null ? trendResult['1時間集計'] : 0) :
+                (baseResult && baseResult['1時間集計'] !== null ? baseResult['1時間集計'] : 0);
+            const total = trendResult ? 
+                (trendResult['全体集計'] !== null ? trendResult['全体集計'] : 0) :
+                (baseResult && baseResult['全体集計'] !== null ? baseResult['全体集計'] : 0);
             
-            const totalTotal = trendResult ? 
-                (trendResult['全体集計'] !== null ? Math.round(trendResult['全体集計']) : 'N/A') :
-                (baseResult && baseResult['全体集計'] !== null ? Math.round(baseResult['全体集計']) : 'N/A');
-            
-            tableHTML += `
-                <tr>
-                    <td>
-                        <div class="summary-work-cell">
-                            <img src="${imageUrl}" alt="${workName}" class="summary-work-image" onerror="this.style.display='none'">
-                            <strong>${workName}</strong>${trendBadge}
-                        </div>
-                    </td>
-                    <td>${mainResult['参照カウント'] !== null ? mainResult['参照カウント'] : 'N/A'}</td>
-                    <td>${oneHourTotal}</td>
-                    <td>${totalTotal}</td>
-                    <td>${mainResult['全体集計終了時刻']}</td>
-                </tr>
-            `;
+            summaryData.push({
+                workName: workName,
+                reference: reference,
+                oneHour: oneHour,
+                total: total,
+                endTime: mainResult['全体集計終了時刻'],
+                hasTrend: hasTrend,
+                trendWords: hasTrend ? trendResult.trendWords : []
+            });
         });
+        
+        // 初期ソート: 全体集計で降順
+        summaryData.sort((a, b) => b.total - a.total);
+        
+        // サマリーテーブルをレンダリング
+        renderSummaryTable(summaryData);
         
         // グループ化された結果でカードを作成
         Object.keys(groupedResults).forEach((workName, groupIndex) => {
@@ -549,21 +545,122 @@ async function loadResults() {
             createChart(chartId, result);
         });
 
-        tableHTML += '</tbody>';
-        summaryTableContent.innerHTML = tableHTML;
-
-        // レポートを自動表示
-        document.getElementById('reportContainer').style.display = 'block';
-        renderRanking('total');
-        
         summaryTable.style.display = 'block';
         resultsContainer.style.display = 'block';
         saveBtn.style.display = 'inline-block';
         document.getElementById('progressContainer').style.display = 'none';
         document.getElementById('startBtn').disabled = false;
 
-        // レポートまでスクロール
-        document.getElementById('reportContainer').scrollIntoView({ behavior: 'smooth' });
+        // サマリーまでスクロール
+        summaryTable.scrollIntoView({ behavior: 'smooth' });
+
+    } catch (error) {
+        alert('結果の取得に失敗しました: ' + error.message);
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('progressContainer').style.display = 'none';
+    }
+}
+
+let currentSortColumn = 'total';
+let currentSortDirection = 'desc';
+
+function renderSummaryTable(summaryData) {
+    const summaryTableContent = document.getElementById('summaryTableContent');
+    
+    let tableHTML = `
+        <thead>
+            <tr>
+                <th onclick="sortSummaryTable('workName')" style="cursor: pointer;">
+                    作品名 ${getSortIcon('workName')}
+                </th>
+                <th onclick="sortSummaryTable('reference')" style="cursor: pointer;">
+                    参照 ${getSortIcon('reference')}
+                </th>
+                <th onclick="sortSummaryTable('oneHour')" style="cursor: pointer;">
+                    1時間集計 ${getSortIcon('oneHour')}
+                </th>
+                <th onclick="sortSummaryTable('total')" style="cursor: pointer;">
+                    全体集計 ${getSortIcon('total')}
+                </th>
+                <th onclick="sortSummaryTable('endTime')" style="cursor: pointer;">
+                    終了時刻 ${getSortIcon('endTime')}
+                </th>
+            </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    summaryData.forEach(item => {
+        const imageUrl = getImageUrl(item.workName);
+        const trendBadge = item.hasTrend 
+            ? `<span style="background: #667eea; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; margin-left: 5px;">+${item.trendWords.join('+')}</span>` 
+            : '';
+        
+        tableHTML += `
+            <tr>
+                <td>
+                    <div class="summary-work-cell">
+                        <img src="${imageUrl}" alt="${item.workName}" class="summary-work-image" onerror="this.style.display='none'">
+                        <strong>${item.workName}</strong>${trendBadge}
+                    </div>
+                </td>
+                <td>${item.reference !== null ? item.reference : 'N/A'}</td>
+                <td>${item.oneHour !== null ? Math.round(item.oneHour) : 'N/A'}</td>
+                <td>${item.total !== null ? Math.round(item.total) : 'N/A'}</td>
+                <td>${item.endTime}</td>
+            </tr>
+        `;
+    });
+    
+    tableHTML += '</tbody>';
+    summaryTableContent.innerHTML = tableHTML;
+    
+    // グローバル変数に保存
+    window.currentSummaryData = summaryData;
+}
+
+function getSortIcon(column) {
+    if (currentSortColumn !== column) {
+        return '⇅';
+    }
+    return currentSortDirection === 'asc' ? '▲' : '▼';
+}
+
+function sortSummaryTable(column) {
+    if (!window.currentSummaryData) return;
+    
+    // 同じカラムをクリックした場合は昇順/降順を切り替え
+    if (currentSortColumn === column) {
+        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+        currentSortColumn = column;
+        currentSortDirection = column === 'workName' || column === 'endTime' ? 'asc' : 'desc';
+    }
+    
+    // ソート実行
+    window.currentSummaryData.sort((a, b) => {
+        let aVal = a[column];
+        let bVal = b[column];
+        
+        // N/Aや数値の処理
+        if (column === 'reference' || column === 'oneHour' || column === 'total') {
+            aVal = aVal !== null ? aVal : -Infinity;
+            bVal = bVal !== null ? bVal : -Infinity;
+        }
+        
+        // 文字列の場合
+        if (typeof aVal === 'string' && typeof bVal === 'string') {
+            const comparison = aVal.localeCompare(bVal, 'ja');
+            return currentSortDirection === 'asc' ? comparison : -comparison;
+        }
+        
+        // 数値の場合
+        return currentSortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+    });
+    
+    // 再描画
+    renderSummaryTable(window.currentSummaryData);
+}
 
     } catch (error) {
         alert('結果の取得に失敗しました: ' + error.message);

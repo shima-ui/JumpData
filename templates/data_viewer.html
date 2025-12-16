@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>データビューア - ジャンプ本誌関連Xポスト数</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
     <style>
         .nav-bar {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -138,26 +140,56 @@
         
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 24px;
+            margin-bottom: 35px;
         }
         
         .stat-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            border-radius: 12px;
+            background: white;
+            border: 2px solid #e8eaf6;
+            padding: 28px 24px;
+            border-radius: 16px;
             text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.2);
+            border-color: #667eea;
         }
         
         .stat-value {
-            font-size: 32px;
-            font-weight: 700;
-            margin-bottom: 5px;
+            font-size: 42px;
+            font-weight: 800;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1.2;
         }
         
         .stat-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
             font-size: 14px;
             opacity: 0.9;
         }
@@ -241,6 +273,37 @@
                 <!-- 統計情報が動的に追加されます -->
             </div>
             
+            <div id="workRankingSection" style="display: none; margin-bottom: 30px;">
+                <h3 style="color: #667eea; margin-bottom: 15px;">📊 作品集計ランキング</h3>
+                <div id="workDataRanking" style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
+            </div>
+            
+            <div id="chartsSection" style="display: none; margin-bottom: 30px;">
+                <h3 style="color: #667eea; margin-bottom: 20px;">📈 ツイート数推移グラフ</h3>
+                <div style="margin-bottom: 20px;">
+                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">作品選択:</label>
+                    <select id="workSelect" onchange="updateCharts()" style="width: 100%; max-width: 400px; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
+                        <option value="">作品を選択してください</option>
+                    </select>
+                </div>
+                <div id="chartContainer" style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); min-height: 400px; display: flex; align-items: center; justify-content: center;">
+                    <p style="color: #888; font-size: 14px;">作品を選択してください</p>
+                </div>
+            </div>
+            
+            <div id="rankingSection" style="display: none; margin-bottom: 30px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 20px;">
+                    <div>
+                        <h3 style="color: #667eea; margin-bottom: 15px;">📊 作品別ランキング (全体集計)</h3>
+                        <div id="workRanking" style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
+                    </div>
+                    <div>
+                        <h3 style="color: #667eea; margin-bottom: 15px;">🔥 ワード別ランキング (全体集計)</h3>
+                        <div id="wordRanking" style="background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);"></div>
+                    </div>
+                </div>
+            </div>
+            
             <div class="filter-section">
                 <input type="number" id="issueFilter" class="filter-input" placeholder="号数で絞り込み" min="1">
                 <input type="text" id="workFilter" class="filter-input" placeholder="作品名で検索">
@@ -312,6 +375,8 @@
                 }
                 
                 renderStats();
+                renderRankings();
+                renderCharts();
                 renderTable();
             } catch (error) {
                 document.getElementById('tableContainer').innerHTML = `
@@ -377,6 +442,361 @@
                     </div>
                 `;
             }
+        }
+        
+        function renderRankings() {
+            const rankingSection = document.getElementById('rankingSection');
+            const workRankingSection = document.getElementById('workRankingSection');
+            
+            // 作品タブの場合
+            if (currentTab === 'work' && allData.length > 0) {
+                rankingSection.style.display = 'none';
+                workRankingSection.style.display = 'block';
+                
+                // 作品別集計（ツイート数の合計と中央値）
+                const workStats = {};
+                allData.forEach(row => {
+                    const work = row['作品名'];
+                    const tweets = row['全体'] || 0;
+                    
+                    if (!workStats[work]) {
+                        workStats[work] = [];
+                    }
+                    workStats[work].push(tweets);
+                });
+                
+                // 合計と中央値を計算
+                const workRanking = Object.keys(workStats).map(work => {
+                    const values = workStats[work];
+                    const total = values.reduce((sum, val) => sum + val, 0);
+                    const sortedValues = [...values].sort((a, b) => a - b);
+                    const mid = Math.floor(sortedValues.length / 2);
+                    const median = sortedValues.length % 2 === 0
+                        ? (sortedValues[mid - 1] + sortedValues[mid]) / 2
+                        : sortedValues[mid];
+                    
+                    return { name: work, total: total, median: median };
+                }).sort((a, b) => b.total - a.total).slice(0, 20);
+                
+                // ランキング表示
+                let rankingHTML = '<table style="width: 100%; border-collapse: collapse;">';
+                rankingHTML += '<thead><tr style="border-bottom: 2px solid #e0e0e0;"><th style="text-align: left; padding: 8px;">順位</th><th style="text-align: left; padding: 8px;">作品名</th><th style="text-align: right; padding: 8px;">合計</th><th style="text-align: right; padding: 8px;">中央値</th></tr></thead><tbody>';
+                
+                workRanking.forEach((item, index) => {
+                    const rank = index + 1;
+                    const medal = rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : `${rank}`;
+                    rankingHTML += `
+                        <tr style="border-bottom: 1px solid #f0f0f0;">
+                            <td style="padding: 10px; font-weight: bold; color: #667eea;">${medal}</td>
+                            <td style="padding: 10px;">${item.name}</td>
+                            <td style="padding: 10px; text-align: right; font-weight: 600;">${Math.round(item.total).toLocaleString()}</td>
+                            <td style="padding: 10px; text-align: right; color: #888;">${Math.round(item.median).toLocaleString()}</td>
+                        </tr>
+                    `;
+                });
+                rankingHTML += '</tbody></table>';
+                
+                document.getElementById('workDataRanking').innerHTML = rankingHTML;
+                return;
+            }
+            
+            // トレンドタブの場合
+            if (currentTab !== 'trend' || allData.length === 0) {
+                rankingSection.style.display = 'none';
+                workRankingSection.style.display = 'none';
+                return;
+            }
+            
+            rankingSection.style.display = 'block';
+            workRankingSection.style.display = 'none';
+            
+            // 作品別集計
+            const workAggregation = {};
+            allData.forEach(row => {
+                const workName = row['作品名'];
+                const total = row['全体'] || 0;
+                
+                if (!workAggregation[workName]) {
+                    workAggregation[workName] = { total: 0, count: 0 };
+                }
+                workAggregation[workName].total += total;
+                workAggregation[workName].count += 1;
+            });
+            
+            // 作品別ランキング（トップ10）
+            const workRanking = Object.entries(workAggregation)
+                .map(([name, data]) => ({ name, total: data.total, count: data.count }))
+                .sort((a, b) => b.total - a.total)
+                .slice(0, 10);
+            
+            // ワード別集計（同一ワードをまとめる）
+            const wordAggregation = {};
+            allData.forEach(row => {
+                const trendWord = row['トレンドワード'];
+                const total = row['全体'] || 0;
+                
+                if (!wordAggregation[trendWord]) {
+                    wordAggregation[trendWord] = {
+                        total: 0,
+                        count: 0,
+                        works: new Set()
+                    };
+                }
+                wordAggregation[trendWord].total += total;
+                wordAggregation[trendWord].count += 1;
+                wordAggregation[trendWord].works.add(row['作品名']);
+            });
+            
+            // ワード別ランキング（トップ10）
+            const wordRanking = Object.entries(wordAggregation)
+                .map(([word, data]) => ({
+                    word: word,
+                    total: data.total,
+                    count: data.count,
+                    works: Array.from(data.works).join(', ')
+                }))
+                .sort((a, b) => b.total - a.total)
+                .slice(0, 10);
+            
+            // 作品別ランキング表示
+            let workRankingHTML = '<table style="width: 100%; border-collapse: collapse;">';
+            workRankingHTML += '<thead><tr style="border-bottom: 2px solid #e0e0e0;"><th style="text-align: left; padding: 8px;">順位</th><th style="text-align: left; padding: 8px;">作品名</th><th style="text-align: right; padding: 8px;">個数</th><th style="text-align: right; padding: 8px;">合計</th></tr></thead><tbody>';
+            
+            workRanking.forEach((item, index) => {
+                const rank = index + 1;
+                const medal = rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : `${rank}`;
+                workRankingHTML += `
+                    <tr style="border-bottom: 1px solid #f0f0f0;">
+                        <td style="padding: 10px; font-weight: bold; color: #667eea;">${medal}</td>
+                        <td style="padding: 10px;">${item.name}</td>
+                        <td style="padding: 10px; text-align: right; color: #888;">${item.count}</td>
+                        <td style="padding: 10px; text-align: right; font-weight: 600;">${Math.round(item.total).toLocaleString()}</td>
+                    </tr>
+                `;
+            });
+            workRankingHTML += '</tbody></table>';
+            
+            // ワード別ランキング表示
+            let wordRankingHTML = '<table style="width: 100%; border-collapse: collapse;">';
+            wordRankingHTML += '<thead><tr style="border-bottom: 2px solid #e0e0e0;"><th style="text-align: left; padding: 8px;">順位</th><th style="text-align: left; padding: 8px;">ワード</th><th style="text-align: left; padding: 8px;">作品</th><th style="text-align: right; padding: 8px;">個数</th><th style="text-align: right; padding: 8px;">全体</th></tr></thead><tbody>';
+            
+            wordRanking.forEach((item, index) => {
+                const rank = index + 1;
+                const medal = rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : `${rank}`;
+                wordRankingHTML += `
+                    <tr style="border-bottom: 1px solid #f0f0f0;">
+                        <td style="padding: 10px; font-weight: bold; color: #667eea;">${medal}</td>
+                        <td style="padding: 10px; font-weight: 600;">${item.word || 'N/A'}</td>
+                        <td style="padding: 10px; font-size: 0.9em; color: #666;">${item.works || 'N/A'}</td>
+                        <td style="padding: 10px; text-align: right; color: #888;">${item.count}</td>
+                        <td style="padding: 10px; text-align: right; font-weight: 600;">${Math.round(item.total).toLocaleString()}</td>
+                    </tr>
+                `;
+            });
+            wordRankingHTML += '</tbody></table>';
+            
+            document.getElementById('workRanking').innerHTML = workRankingHTML;
+            document.getElementById('wordRanking').innerHTML = wordRankingHTML;
+        }
+        
+        let chartInstance = null;
+        
+        function renderCharts() {
+            const chartsSection = document.getElementById('chartsSection');
+            
+            if (currentTab !== 'work' || allData.length === 0) {
+                chartsSection.style.display = 'none';
+                return;
+            }
+            
+            chartsSection.style.display = 'block';
+            
+            // 作品のリストを取得してセレクトボックスに追加
+            const works = [...new Set(allData.map(d => d['作品名']))].sort();
+            const workSelect = document.getElementById('workSelect');
+            const currentValue = workSelect.value;
+            
+            workSelect.innerHTML = '<option value="">作品を選択してください</option>';
+            works.forEach(work => {
+                const option = document.createElement('option');
+                option.value = work;
+                option.textContent = work;
+                workSelect.appendChild(option);
+            });
+            
+            if (currentValue && works.includes(currentValue)) {
+                workSelect.value = currentValue;
+                updateCharts();
+            } else {
+                // 作品未選択の場合はプレースホルダーを表示
+                const chartContainer = document.getElementById('chartContainer');
+                chartContainer.innerHTML = '<p style="color: #888; font-size: 14px;">作品を選択してください</p>';
+            }
+        }
+        
+        function updateCharts() {
+            const workSelect = document.getElementById('workSelect');
+            const selectedWork = workSelect.value;
+            
+            const chartContainer = document.getElementById('chartContainer');
+            
+            if (!selectedWork) {
+                chartContainer.innerHTML = '<p style="color: #888; font-size: 14px;">作品を選択してください</p>';
+                if (chartInstance) {
+                    chartInstance.destroy();
+                    chartInstance = null;
+                }
+                return;
+            }
+            
+            // キャンバスを作成
+            chartContainer.innerHTML = '<canvas id="trendChart"></canvas>';
+            
+            // 選択した作品のデータをフィルタリング
+            const workData = allData.filter(d => d['作品名'] === selectedWork);
+            
+            // 号数ごとにグループ化（トレンド含む/含まないを分けて保持）
+            const issueData = {};
+            workData.forEach(row => {
+                const issue = row['号数'];
+                const hasTrend = row['トレンド含む'];
+                
+                if (!issueData[issue]) {
+                    issueData[issue] = {
+                        base: null,
+                        withTrend: null
+                    };
+                }
+                
+                if (hasTrend) {
+                    issueData[issue].withTrend = row;
+                } else {
+                    issueData[issue].base = row;
+                }
+            });
+            
+            // 号数順にソート
+            const sortedIssues = Object.keys(issueData).map(Number).sort((a, b) => a - b);
+            
+            // データセットを作成
+            const datasets = [];
+            
+            // トレンド含まないデータ
+            const baseData = sortedIssues.map(issue => {
+                const data = issueData[issue].base;
+                return data ? data['全体'] || 0 : null;
+            });
+            
+            // トレンド含むデータ
+            const trendData = sortedIssues.map(issue => {
+                const data = issueData[issue].withTrend;
+                return data ? data['全体'] || 0 : null;
+            });
+            
+            // トレンド効果（差分）
+            const trendEffect = sortedIssues.map((issue, index) => {
+                const base = baseData[index];
+                const trend = trendData[index];
+                if (base !== null && trend !== null && trend > base) {
+                    return trend - base;
+                }
+                return null;
+            });
+            
+            // 基本データセット
+            if (baseData.some(v => v !== null)) {
+                datasets.push({
+                    label: '基本クエリ',
+                    data: baseData,
+                    backgroundColor: '#667eea',
+                    borderColor: '#667eea',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                });
+            }
+            
+            // トレンド効果データセット
+            if (trendEffect.some(v => v !== null)) {
+                datasets.push({
+                    label: 'トレンド効果',
+                    data: trendEffect,
+                    backgroundColor: '#f093b9',
+                    borderColor: '#f093b9',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: true
+                });
+            }
+            
+            // チャートを描画
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+            
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedIssues.map(i => `${i}号`),
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    aspectRatio: 2,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `${selectedWork} - ツイート数推移`,
+                            font: { size: 16, weight: 'bold' },
+                            color: '#333'
+                        },
+                        legend: {
+                            display: true,
+                            position: 'bottom',
+                            labels: {
+                                boxWidth: 12,
+                                padding: 10,
+                                font: { size: 11 }
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const value = context.parsed.y;
+                                    return value !== null ? `${context.dataset.label}: ${Math.round(value).toLocaleString()}` : '';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            stacked: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return value.toLocaleString();
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'ツイート数',
+                                font: { size: 12, weight: 'bold' }
+                            }
+                        },
+                        x: {
+                            stacked: true,
+                            title: {
+                                display: true,
+                                text: '号数',
+                                font: { size: 12, weight: 'bold' }
+                            }
+                        }
+                    }
+                }
+            });
         }
         
         function applyFilters() {

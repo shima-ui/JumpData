@@ -280,15 +280,23 @@
             </div>
             
             <div id="issueSection" style="display: none; margin-bottom: 30px;">
-                <h3 style="color: #667eea; margin-bottom: 20px;">📖 号別TOP10</h3>
-                <div style="margin-bottom: 20px;">
-                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">号数選択:</label>
-                    <select id="issueSelect" onchange="updateIssueRanking()" style="width: 100%; max-width: 400px; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 14px;">
-                        <option value="">号数を選択してください</option>
-                    </select>
+                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; padding: 30px; box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3); margin-bottom: 25px;">
+                    <h3 style="color: white; margin: 0 0 20px 0; font-size: 24px; font-weight: 700; display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 28px;">📖</span>
+                        <span>号別TOP10 ランキング</span>
+                    </h3>
+                    <div style="background: rgba(255, 255, 255, 0.95); border-radius: 12px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                        <label style="font-weight: 600; margin-bottom: 12px; display: block; color: #667eea; font-size: 14px;">📝 号数を選択:</label>
+                        <select id="issueSelect" onchange="updateIssueRanking()" style="width: 100%; padding: 12px 16px; border: 2px solid #667eea; border-radius: 10px; font-size: 15px; font-weight: 600; color: #333; background: white; cursor: pointer; transition: all 0.3s ease; box-shadow: 0 2px 4px rgba(0,0,0,0.05);" onmouseover="this.style.borderColor='#764ba2'; this.style.boxShadow='0 4px 8px rgba(102, 126, 234, 0.2)';" onmouseout="this.style.borderColor='#667eea'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.05)';">
+                            <option value="">号数を選択してください</option>
+                        </select>
+                    </div>
                 </div>
-                <div id="issueRankingContainer" style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); min-height: 300px; display: flex; align-items: center; justify-content: center;">
-                    <p style="color: #888; font-size: 14px;">号数を選択してください</p>
+                <div id="issueRankingContainer" style="background: white; border-radius: 16px; padding: 30px; box-shadow: 0 8px 24px rgba(0,0,0,0.12); min-height: 400px; display: flex; align-items: center; justify-content: center; border: 1px solid #f0f0f0;">
+                    <div style="text-align: center;">
+                        <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.3;">📊</div>
+                        <p style="color: #888; font-size: 16px; margin: 0;">号数を選択してください</p>
+                    </div>
                 </div>
             </div>
             
@@ -350,6 +358,108 @@
             workFilter.addEventListener('input', applyFilters);
         });
         
+        function mergeWorkData(data, trendData = []) {
+            // トレンドデータを号数+作品名でマップ化
+            const trendMap = {};
+            trendData.forEach(row => {
+                const key = `${row['号数']}_${row['作品名']}`;
+                if (!trendMap[key]) {
+                    trendMap[key] = [];
+                }
+                trendMap[key].push({
+                    word: row['トレンドワード'],
+                    rank: row['順位']
+                });
+            });
+            
+            // 同じ号数・作品名のデータをマージ
+            const merged = {};
+            
+            data.forEach(row => {
+                const key = `${row['号数']}_${row['作品名']}`;
+                
+                if (!merged[key]) {
+                    merged[key] = {
+                        '作品名': row['作品名'],
+                        '号数': row['号数'],
+                        '基本1時間': null,
+                        '基本全体': null,
+                        'トレンド1時間': null,
+                        'トレンド全体': null,
+                        'トレンド効果': null,
+                        '参照': row['参照'],
+                        '基本クエリ': null,
+                        'トレンドクエリ': null,
+                        '基本終了': null,
+                        'トレンド終了': null,
+                        'トレンドワード': null,
+                        '最高順位': null,
+                        'クエリ': '',
+                        '終了': ''
+                    };
+                    
+                    // トレンドデータからトレンドワードと順位を取得
+                    if (trendMap[key] && trendMap[key].length > 0) {
+                        // トレンド情報を配列で保持
+                        merged[key]['トレンド情報'] = trendMap[key].filter(t => t.word && t.rank !== null && t.rank !== undefined);
+                        
+                        // 表示用にトレンドワードと最高順位も保持（後方互換性のため）
+                        const words = trendMap[key].map(t => t.word).filter(w => w);
+                        const ranks = trendMap[key].map(t => t.rank).filter(r => r !== null && r !== undefined);
+                        
+                        if (words.length > 0) {
+                            merged[key]['トレンドワード'] = words.join(', ');
+                        }
+                        if (ranks.length > 0) {
+                            merged[key]['最高順位'] = Math.min(...ranks);
+                        }
+                    }
+                }
+                
+                if (row['トレンド含む']) {
+                    merged[key]['トレンド1時間'] = row['1時間'];
+                    merged[key]['トレンド全体'] = row['全体'];
+                    merged[key]['トレンドクエリ'] = row['クエリ'];
+                    merged[key]['トレンド終了'] = row['終了'];
+                } else {
+                    merged[key]['基本1時間'] = row['1時間'];
+                    merged[key]['基本全体'] = row['全体'];
+                    merged[key]['基本クエリ'] = row['クエリ'];
+                    merged[key]['基本終了'] = row['終了'];
+                }
+                
+                // トレンド効果を計算
+                if (merged[key]['基本全体'] !== null && merged[key]['トレンド全体'] !== null) {
+                    merged[key]['トレンド効果'] = merged[key]['トレンド全体'] - merged[key]['基本全体'];
+                }
+            });
+            
+            // クエリと終了時刻を統合
+            Object.values(merged).forEach(row => {
+                const baseQuery = row['基本クエリ'] || '';
+                const trendQuery = row['トレンドクエリ'] || '';
+                if (baseQuery && trendQuery) {
+                    row['クエリ'] = `${baseQuery} (トレンド: ${trendQuery})`;
+                } else if (baseQuery) {
+                    row['クエリ'] = baseQuery;
+                } else if (trendQuery) {
+                    row['クエリ'] = trendQuery;
+                }
+                
+                const baseEnd = row['基本終了'] || '';
+                const trendEnd = row['トレンド終了'] || '';
+                if (baseEnd && trendEnd) {
+                    row['終了'] = `${baseEnd} (トレンド: ${trendEnd})`;
+                } else if (baseEnd) {
+                    row['終了'] = baseEnd;
+                } else if (trendEnd) {
+                    row['終了'] = trendEnd;
+                }
+            });
+            
+            return Object.values(merged);
+        }
+        
         function switchTab(tab) {
             currentTab = tab;
             sortColumn = null;
@@ -388,15 +498,26 @@
                 }
                 
                 allData = result.data;
+                
+                // 作品タブと号別タブの場合、同じ号・同じ作品のデータをマージ
+                if (currentTab === 'work' || currentTab === 'issue') {
+                    // トレンドデータを取得
+                    const trendResponse = await fetch('/api/get_trend_data');
+                    const trendResult = await trendResponse.json();
+                    const trendData = trendResult.data || [];
+                    
+                    allData = mergeWorkData(allData, trendData);
+                }
+                
                 filteredData = [...allData];
                 
                 // カラム順を設定
                 if (currentTab === 'work') {
-                    currentColumns = ['作品名', '号数', 'トレンド含む', '1時間', '全体', '参照', 'クエリ', '終了'];
+                    currentColumns = ['作品名', '号数', '基本1時間', '基本全体', 'トレンド1時間', 'トレンド全体', 'トレンド効果', '参照', 'クエリ', '終了'];
                 } else if (currentTab === 'trend') {
                     currentColumns = ['作品名', '号数', 'トレンドワード', '順位', '1時間', '全体', '参照', '終了'];
                 } else if (currentTab === 'issue') {
-                    currentColumns = ['作品名', '号数', 'トレンド含む', '1時間', '全体', '参照', 'クエリ', '終了'];
+                    currentColumns = ['作品名', '号数', '基本1時間', '基本全体', 'トレンド1時間', 'トレンド全体', 'トレンド効果', '参照', 'クエリ', '終了'];
                 }
                 
                 renderStats();
@@ -502,12 +623,17 @@
                 const workStats = {};
                 allData.forEach(row => {
                     const work = row['作品名'];
-                    const tweets = row['全体'] || 0;
+                    // トレンドありのデータがある場合はそれを採用、なければ基本データ
+                    const trendValue = row['トレンド全体'];
+                    const baseValue = row['基本全体'];
+                    const value = trendValue !== null && trendValue !== undefined ? trendValue : baseValue;
                     
                     if (!workStats[work]) {
                         workStats[work] = [];
                     }
-                    workStats[work].push(tweets);
+                    if (value !== null && value !== undefined && value > 0) {
+                        workStats[work].push(value);
+                    }
                 });
                 
                 // 合計と中央値を計算
@@ -854,7 +980,7 @@
             
             issueSection.style.display = 'block';
             
-            // 号数のリストを取得
+            // 号数のリストを取得（昇順にソート）
             const issues = [...new Set(allData.map(d => d['号数']))].sort((a, b) => a - b);
             
             // セレクトボックスを更新
@@ -866,6 +992,13 @@
                 option.textContent = `${issue}号`;
                 issueSelect.appendChild(option);
             });
+            
+            // 最新号（最大値）をデフォルト選択
+            if (issues.length > 0) {
+                const latestIssue = issues[issues.length - 1];
+                issueSelect.value = latestIssue;
+                updateIssueRanking();
+            }
         }
         
         function updateIssueRanking() {
@@ -886,30 +1019,78 @@
                 return;
             }
             
-            // 全体ツイート数でソートしてTOP10を取得
+            // トレンド全体を優先、なければ基本全体を採用
             const top10 = issueData
-                .sort((a, b) => (b['全体'] || 0) - (a['全体'] || 0))
+                .map(row => {
+                    const baseTotal = row['基本全体'] || 0;
+                    const trendTotal = row['トレンド全体'] || 0;
+                    const adoptedValue = trendTotal > 0 ? trendTotal : baseTotal;
+                    const displayText = (trendTotal > 0 && baseTotal > 0) 
+                        ? `${Math.round(adoptedValue).toLocaleString()} (基本: ${Math.round(baseTotal).toLocaleString()})`
+                        : Math.round(adoptedValue).toLocaleString();
+                    
+                    return {
+                        ...row,
+                        adoptedValue: adoptedValue,
+                        displayText: displayText
+                    };
+                })
+                .sort((a, b) => b.adoptedValue - a.adoptedValue)
                 .slice(0, 10);
             
             // ランキング表示
-            let rankingHTML = '<table style="width: 100%; border-collapse: collapse;">';
-            rankingHTML += '<thead><tr style="border-bottom: 2px solid #e0e0e0;"><th style="text-align: left; padding: 8px;">順位</th><th style="text-align: left; padding: 8px;">作品名</th><th style="text-align: right; padding: 8px;">1時間</th><th style="text-align: right; padding: 8px;">全体</th><th style="text-align: left; padding: 8px;">トレンド</th></tr></thead><tbody>';
+            let rankingHTML = '<div style="overflow-x: auto;">';
+            rankingHTML += '<table style="width: 100%; border-collapse: separate; border-spacing: 0;">';
+            rankingHTML += '<thead><tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;"><th style="text-align: center; padding: 8px; border-top-left-radius: 10px; font-weight: 600;"></th><th style="text-align: left; padding: 8px; font-weight: 600;">トレンド(順位)</th><th style="text-align: right; padding: 8px; border-top-right-radius: 10px; font-weight: 600;">ツイート数</th></tr></thead><tbody>';
             
             top10.forEach((item, index) => {
                 const rank = index + 1;
-                const medal = rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : `${rank}`;
-                const trendStatus = item['トレンド含む'] ? '✓' : '';
+                const isTopThree = rank <= 3;
+                const workName = item['作品名'];
+                const imagePath = `/static/images/${workName}.jpg`;
+                
+                // トレンド情報の表示（改行で区切る）
+                let trendDisplay = '-';
+                if (item['トレンド情報'] && item['トレンド情報'].length > 0) {
+                    // 各トレンドワードと順位をペアで表示（改行で区切り）
+                    trendDisplay = item['トレンド情報']
+                        .map(t => `${t.word}(${t.rank}位)`)
+                        .join('<br>');
+                } else if (item['トレンドワード']) {
+                    // 後方互換性：トレンド情報がない場合
+                    const bestRank = item['最高順位'];
+                    trendDisplay = bestRank ? `${item['トレンドワード']} (${bestRank}位)` : item['トレンドワード'];
+                }
+                
+                const trendTotal = item['トレンド全体'] || 0;
+                const displayTweets = trendTotal > 0 ? Math.round(trendTotal).toLocaleString() : Math.round(item['基本全体'] || 0).toLocaleString();
+                
+                const bgColor = rank % 2 === 0 ? '#fafbff' : '#ffffff';
+                const hoverStyle = 'onmouseover="this.style.backgroundColor=\'#f0f4ff\';" onmouseout="this.style.backgroundColor=\'' + bgColor + '\';"';
+                
+                // 3位までと4位以降でサイズを変える
+                const rowPadding = isTopThree ? '12px 8px' : '8px';
+                const rankFontSize = isTopThree ? '20px' : '14px';
+                const imageSize = isTopThree ? '60px' : '45px';
+                const nameFontSize = isTopThree ? '15px' : '13px';
+                const trendFontSize = isTopThree ? '13px' : '12px';
+                const tweetFontSize = isTopThree ? '16px' : '14px';
+                
                 rankingHTML += `
-                    <tr style="border-bottom: 1px solid #f0f0f0;">
-                        <td style="padding: 10px; font-weight: bold; color: #667eea;">${medal}</td>
-                        <td style="padding: 10px; font-weight: 600;">${item['作品名']}</td>
-                        <td style="padding: 10px; text-align: right; color: #888;">${Math.round(item['1時間'] || 0).toLocaleString()}</td>
-                        <td style="padding: 10px; text-align: right; font-weight: 600;">${Math.round(item['全体'] || 0).toLocaleString()}</td>
-                        <td style="padding: 10px; text-align: center; color: #667eea;">${trendStatus}</td>
+                    <tr style="background-color: ${bgColor}; transition: all 0.2s ease;" ${hoverStyle}>
+                        <td style="padding: ${rowPadding}; text-align: center; vertical-align: middle;">
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-weight: bold; color: #667eea; font-size: ${rankFontSize}; min-width: 24px;">${rank}</span>
+                                <img src="${imagePath}" alt="${workName}" style="width: ${imageSize}; height: ${imageSize}; object-fit: cover; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.12); border: 2px solid #fff;" onerror="this.style.display='none'">
+                                <span style="font-weight: 600; font-size: ${nameFontSize}; color: #333;">${workName}</span>
+                            </div>
+                        </td>
+                        <td style="padding: ${rowPadding}; color: #333; font-size: ${trendFontSize}; line-height: 1.5; vertical-align: middle;">${trendDisplay}</td>
+                        <td style="padding: ${rowPadding}; text-align: right; font-weight: 700; font-size: ${tweetFontSize}; color: #667eea; vertical-align: middle;">${displayTweets}</td>
                     </tr>
                 `;
             });
-            rankingHTML += '</tbody></table>';
+            rankingHTML += '</tbody></table></div>';
             
             container.innerHTML = rankingHTML;
         }
@@ -991,13 +1172,18 @@
                     let displayValue = '';
                     
                     if (value === null || value === undefined) {
-                        displayValue = 'N/A';
+                        displayValue = '-';
                     } else if (typeof value === 'number') {
                         cellClass = 'number-cell';
-                        if (col === '1時間' || col === '全体' || col === '順位') {
+                        if (col.includes('1時間') || col.includes('全体') || col === '順位' || col === 'トレンド効果') {
                             cellClass += ' highlight-number';
                         }
-                        displayValue = Math.round(value).toLocaleString();
+                        // トレンド効果の場合は符号を付ける
+                        if (col === 'トレンド効果' && value > 0) {
+                            displayValue = '+' + Math.round(value).toLocaleString();
+                        } else {
+                            displayValue = Math.round(value).toLocaleString();
+                        }
                     } else if (typeof value === 'boolean') {
                         displayValue = value ? '✓' : '';
                         cellClass = 'number-cell';
@@ -1007,6 +1193,9 @@
                     } else if (col === 'クエリ' || col === 'トレンドワード') {
                         cellClass = 'query-cell';
                         displayValue = `<span title="${value}">${value}</span>`;
+                    } else if (col === '終了') {
+                        cellClass = 'date-cell';
+                        displayValue = value;
                     } else {
                         displayValue = value;
                     }

@@ -662,12 +662,7 @@ function sortSummaryTable(column) {
     renderSummaryTable(window.currentSummaryData);
 }
 
-    } catch (error) {
-        alert('結果の取得に失敗しました: ' + error.message);
-        document.getElementById('startBtn').disabled = false;
-        document.getElementById('progressContainer').style.display = 'none';
-    }
-}
+    
 
 function removeTrend(index) {
     if (confirm('このトレンドワードを削除しますか?')) {

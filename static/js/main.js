@@ -352,6 +352,9 @@ async function loadResults() {
     try {
         const response = await fetch('/api/results');
         const data = await response.json();
+        
+        console.log('loadResults - API response:', data);
+        console.log('loadResults - results count:', data.results ? data.results.length : 0);
 
         const resultsContainer = document.getElementById('resultsContainer');
         const summaryTable = document.getElementById('summaryTable');
@@ -361,8 +364,15 @@ async function loadResults() {
         resultsContainer.innerHTML = '';
         currentResults = data.results; // 結果を保存
         
+        if (!data.results || data.results.length === 0) {
+            console.error('No results data available');
+            resultsContainer.innerHTML = '<p style="color: red;">結果データがありません</p>';
+            return;
+        }
+        
         // トレンドでない結果のみをフィルタリング
         const workResults = data.results.filter(r => !r.isTrend);
+        console.log('loadResults - work results count:', workResults.length);
         
         // 作品名でグループ化（トレンドありとトレンドなしをまとめる）
         const groupedResults = {};
@@ -1001,6 +1011,16 @@ function renderRanking(sortBy) {
 function createChart(chartId, result) {
     const ctx = document.getElementById(chartId).getContext('2d');
     
+    // デバッグ情報
+    console.log('createChart called:', chartId);
+    console.log('result:', result);
+    console.log('chart_data:', result.chart_data);
+    
+    if (!result.chart_data || result.chart_data.length === 0) {
+        console.error('No chart data available for', chartId);
+        return;
+    }
+    
     // 参照カウントのライン用データ
     const referenceLineData = result.chart_data.map(point => ({
         x: point.x,
@@ -1157,6 +1177,7 @@ function createChart(chartId, result) {
                     offset: false
                 },
                 y: {
+                    stacked: true,
                     beginAtZero: true,
                     title: {
                         display: true,
@@ -1246,8 +1267,19 @@ function createChart(chartId, result) {
 function createCombinedChart(chartId, baseResult, trendResult) {
     const ctx = document.getElementById(chartId).getContext('2d');
     
+    // デバッグ情報
+    console.log('createCombinedChart called:', chartId);
+    console.log('baseResult:', baseResult);
+    console.log('trendResult:', trendResult);
+    
     // 使用する結果データを決定
     const mainResult = baseResult || trendResult;
+    
+    if (!mainResult || !mainResult.chart_data || mainResult.chart_data.length === 0) {
+        console.error('No chart data available for', chartId);
+        return;
+    }
+    
     const referenceCount = mainResult['参照カウント'];
     const referenceDate = new Date(mainResult.reference_base_datetime);
     

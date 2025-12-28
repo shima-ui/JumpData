@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     <style>
         .nav-bar {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -809,6 +810,9 @@
             const workSelect = document.getElementById('workSelect');
             const selectedWork = workSelect.value;
             
+            console.log('updateCharts called, selectedWork:', selectedWork);
+            console.log('allData:', allData);
+            
             const chartContainer = document.getElementById('chartContainer');
             
             if (!selectedWork) {
@@ -825,89 +829,155 @@
             
             // 選択した作品のデータをフィルタリング
             const workData = allData.filter(d => d['作品名'] === selectedWork);
+            console.log('workData for', selectedWork, ':', workData);
+            console.log('First work data item:', JSON.stringify(workData[0], null, 2));
             
-            // 号数ごとにグループ化（トレンド含む/含まないを分けて保持）
+            if (workData.length === 0) {
+                chartContainer.innerHTML = '<p style="color: red;">この作品のデータがありません</p>';
+                console.error('No data found for work:', selectedWork);
+                return;
+            }
+            
+            // 号数でグループ化（統合データなので1行に全情報が含まれる）
             const issueData = {};
             workData.forEach(row => {
                 const issue = row['号数'];
-                const hasTrend = row['トレンド含む'];
-                
-                if (!issueData[issue]) {
-                    issueData[issue] = {
-                        base: null,
-                        withTrend: null
-                    };
-                }
-                
-                if (hasTrend) {
-                    issueData[issue].withTrend = row;
-                } else {
-                    issueData[issue].base = row;
-                }
+                issueData[issue] = row;
             });
+            
+            console.log('issueData:', issueData);
             
             // 号数順にソート
             const sortedIssues = Object.keys(issueData).map(Number).sort((a, b) => a - b);
+            console.log('sortedIssues:', sortedIssues);
             
-            // データセットを作成
+            // データセットを作成（4段階の積み上げ）
             const datasets = [];
             
-            // トレンド含まないデータ
-            const baseData = sortedIssues.map(issue => {
-                const data = issueData[issue].base;
-                return data ? data['全体'] || 0 : null;
+            // 1. 基本クエリ（1時間）
+            const base1HourData = sortedIssues.map(issue => {
+                const data = issueData[issue];
+                return data ? (data['基本1時間'] || 0) : 0;
             });
             
-            // トレンド含むデータ
-            const trendData = sortedIssues.map(issue => {
-                const data = issueData[issue].withTrend;
-                return data ? data['全体'] || 0 : null;
-            });
-            
-            // トレンド効果（差分）
-            const trendEffect = sortedIssues.map((issue, index) => {
-                const base = baseData[index];
-                const trend = trendData[index];
-                if (base !== null && trend !== null && trend > base) {
-                    return trend - base;
+            // 2. 基本クエリ（全体 - 1時間）= 1時間以降の分
+            const baseAfter1HourData = sortedIssues.map(issue => {
+                const data = issueData[issue];
+                if (data) {
+                    const total = data['基本全体'] || 0;
+                    const oneHour = data['基本1時間'] || 0;
+                    return Math.max(0, total - oneHour);
                 }
-                return null;
+                return 0;
             });
             
-            // 基本データセット
-            if (baseData.some(v => v !== null)) {
+            // 3. トレンドあり（1時間）の増加分
+            const trend1HourData = sortedIssues.map(issue => {
+                const data = issueData[issue];
+                if (data) {
+                    const trendOneHour = data['トレンド1時間'] || 0;
+                    const baseOneHour = data['基本1時間'] || 0;
+                    return Math.max(0, trendOneHour - baseOneHour);
+                }
+                return 0;
+            });
+            
+            // 4. トレンドあり（全体 - 1時間）の増加分
+            const trendAfter1HourData = sortedIssues.map(issue => {
+                const data = issueData[issue];
+                if (data) {
+                    const trendTotal = data['トレンド全体'] || 0;
+                    const trendOneHour = data['トレンド1時間'] || 0;
+                    const baseTotal = data['基本全体'] || 0;
+                    const baseOneHour = data['基本1時間'] || 0;
+                    const trendAfter = Math.max(0, trendTotal - trendOneHour);
+                    const baseAfter = Math.max(0, baseTotal - baseOneHour);
+                    return Math.max(0, trendAfter - baseAfter);
+                }
+                return 0;
+            });
+            
+            // データセットを追加（下から順に積み上げ）
+            datasets.push({
+                label: '基本クエリ（1時間）',
+                data: base1HourData,
+                backgroundColor: '#4A90E2',
+                borderColor: '#4A90E2',
+                borderWidth: 1
+            });
+            
+            datasets.push({
+                label: '基本クエリ（全体）',
+                data: baseAfter1HourData,
+                backgroundColor: '#667eea',
+                borderColor: '#667eea',
+                borderWidth: 1
+            });
+            
+            if (trend1HourData.some(v => v > 0)) {
                 datasets.push({
-                    label: '基本クエリ',
-                    data: baseData,
-                    backgroundColor: '#667eea',
-                    borderColor: '#667eea',
-                    borderWidth: 2,
-                    tension: 0.4,
-                    fill: true
+                    label: 'トレンドあり（1時間）',
+                    data: trend1HourData,
+                    backgroundColor: '#FF6B9D',
+                    borderColor: '#FF6B9D',
+                    borderWidth: 1
                 });
             }
             
-            // トレンド効果データセット
-            if (trendEffect.some(v => v !== null)) {
+            if (trendAfter1HourData.some(v => v > 0)) {
                 datasets.push({
-                    label: 'トレンド効果',
-                    data: trendEffect,
+                    label: 'トレンドあり（全体）',
+                    data: trendAfter1HourData,
                     backgroundColor: '#f093b9',
                     borderColor: '#f093b9',
-                    borderWidth: 2,
-                    tension: 0.4,
-                    fill: true
+                    borderWidth: 1
                 });
             }
             
+            console.log('base1HourData:', base1HourData);
+            console.log('baseAfter1HourData:', baseAfter1HourData);
+            console.log('trend1HourData:', trend1HourData);
+            console.log('trendAfter1HourData:', trendAfter1HourData);
+            console.log('datasets:', datasets);
+            
+            if (datasets.length === 0) {
+                chartContainer.innerHTML = '<p style="color: red;">グラフデータがありません</p>';
+                console.error('No datasets to render');
+                return;
+            }
+            
+            // 中央値を計算（基本全体の値から）
+            const baseTotalValues = sortedIssues.map(issue => {
+                const data = issueData[issue];
+                return data ? (data['基本全体'] || 0) : 0;
+            }).filter(v => v > 0);
+            
+            let median = 0;
+            if (baseTotalValues.length > 0) {
+                const sortedValues = [...baseTotalValues].sort((a, b) => a - b);
+                const mid = Math.floor(sortedValues.length / 2);
+                median = sortedValues.length % 2 === 0
+                    ? (sortedValues[mid - 1] + sortedValues[mid]) / 2
+                    : sortedValues[mid];
+            }
+            console.log('Median value:', median);
+            
             // チャートを描画
-            const ctx = document.getElementById('trendChart').getContext('2d');
+            const ctx = document.getElementById('trendChart');
+            if (!ctx) {
+                console.error('Canvas element not found');
+                return;
+            }
+            const context = ctx.getContext('2d');
             
             if (chartInstance) {
                 chartInstance.destroy();
             }
             
-            chartInstance = new Chart(ctx, {
+            console.log('Creating chart with labels:', sortedIssues.map(i => `${i}号`));
+            
+            try {
+                chartInstance = new Chart(context, {
                 type: 'bar',
                 data: {
                     labels: sortedIssues.map(i => `${i}号`),
@@ -940,6 +1010,30 @@
                                     return value !== null ? `${context.dataset.label}: ${Math.round(value).toLocaleString()}` : '';
                                 }
                             }
+                        },
+                        annotation: {
+                            annotations: {
+                                medianLine: {
+                                    type: 'line',
+                                    yMin: median,
+                                    yMax: median,
+                                    borderColor: 'rgb(255, 99, 132)',
+                                    borderWidth: 2,
+                                    borderDash: [5, 5],
+                                    label: {
+                                        display: true,
+                                        content: `中央値: ${Math.round(median).toLocaleString()}`,
+                                        position: 'end',
+                                        backgroundColor: 'rgb(255, 99, 132)',
+                                        color: 'white',
+                                        font: {
+                                            size: 11,
+                                            weight: 'bold'
+                                        },
+                                        padding: 4
+                                    }
+                                }
+                            }
                         }
                     },
                     scales: {
@@ -968,6 +1062,11 @@
                     }
                 }
             });
+            console.log('Chart created successfully');
+        } catch (error) {
+            console.error('Error creating chart:', error);
+            chartContainer.innerHTML = '<p style="color: red;">グラフの作成中にエラーが発生しました: ' + error.message + '</p>';
+        }
         }
         
         function renderIssueSection() {
@@ -1041,7 +1140,13 @@
             // ランキング表示
             let rankingHTML = '<div style="overflow-x: auto;">';
             rankingHTML += '<table style="width: 100%; border-collapse: separate; border-spacing: 0;">';
-            rankingHTML += '<thead><tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;"><th style="text-align: center; padding: 8px; border-top-left-radius: 10px; font-weight: 600;"></th><th style="text-align: left; padding: 8px; font-weight: 600;">トレンド(順位)</th><th style="text-align: right; padding: 8px; border-top-right-radius: 10px; font-weight: 600;">ツイート数</th></tr></thead><tbody>';
+            rankingHTML += '<thead><tr style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;"><th style="text-align: center; padding: 8px; border-top-left-radius: 10px; font-weight: 600;"></th><th style="text-align: left; padding: 8px; font-weight: 600;">トレンド(順位)</th><th style="text-align: right; padding: 8px; font-weight: 600;">ツイート数</th><th style="text-align: left; padding: 8px; border-top-right-radius: 10px; font-weight: 600; min-width: 200px;">推移グラフ</th></tr></thead><tbody>';
+            
+            // 全号数を取得してソート
+            const allIssues = [...new Set(allData.map(d => d['号数']))].sort((a, b) => a - b);
+            
+            // グラフ用に全データから最大値を計算
+            const globalMaxValue = Math.max(...allData.map(item => item['トレンド全体'] || item['基本全体'] || 0));
             
             top10.forEach((item, index) => {
                 const rank = index + 1;
@@ -1063,7 +1168,49 @@
                 }
                 
                 const trendTotal = item['トレンド全体'] || 0;
-                const displayTweets = trendTotal > 0 ? Math.round(trendTotal).toLocaleString() : Math.round(item['基本全体'] || 0).toLocaleString();
+                const baseTotal = item['基本全体'] || 0;
+                const displayValue = trendTotal > 0 ? trendTotal : baseTotal;
+                const displayTweets = Math.round(displayValue).toLocaleString();
+                
+                // この作品の全号のデータを取得
+                const workHistory = allIssues.map(issueNum => {
+                    const issueRow = allData.find(d => d['作品名'] === workName && d['号数'] == issueNum);
+                    if (issueRow) {
+                        const val = issueRow['トレンド全体'] || issueRow['基本全体'] || 0;
+                        return { issue: issueNum, value: val };
+                    }
+                    return { issue: issueNum, value: 0 };
+                });
+                
+                // この作品の最大値を計算（作品ごとに最適化）
+                const workMaxValue = Math.max(...workHistory.map(d => d.value), 1);
+                
+                // SVGで棒グラフを作成
+                const graphWidth = 180;
+                const graphHeight = 40;
+                const padding = 4;
+                const chartWidth = graphWidth - padding * 2;
+                const chartHeight = graphHeight - padding * 2;
+                
+                // 棒の幅を計算
+                const barWidth = Math.max(8, chartWidth / workHistory.length - 2);
+                const barSpacing = chartWidth / workHistory.length;
+                
+                // 棒グラフのバーを作成
+                const bars = workHistory.map((d, i) => {
+                    const x = padding + barSpacing * i + (barSpacing - barWidth) / 2;
+                    const barHeight = (d.value / workMaxValue * chartHeight);
+                    const y = padding + chartHeight - barHeight;
+                    const isSelected = d.issue == selectedIssue;
+                    const color = isSelected ? '#667eea' : '#b0b0b0';
+                    
+                    return `
+                        <rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" 
+                              fill="${color}" rx="2" opacity="${d.value > 0 ? '1' : '0.2'}">
+                            <title>${d.issue}号: ${Math.round(d.value).toLocaleString()}</title>
+                        </rect>
+                    `;
+                }).join('');
                 
                 const bgColor = rank % 2 === 0 ? '#fafbff' : '#ffffff';
                 const hoverStyle = 'onmouseover="this.style.backgroundColor=\'#f0f4ff\';" onmouseout="this.style.backgroundColor=\'' + bgColor + '\';"';
@@ -1076,6 +1223,13 @@
                 const trendFontSize = isTopThree ? '13px' : '12px';
                 const tweetFontSize = isTopThree ? '16px' : '14px';
                 
+                // SVGグラフHTML
+                const chartHTML = `
+                    <svg width="${graphWidth}" height="${graphHeight}" style="border-radius: 4px; background: #f8f9fa;">
+                        ${bars}
+                    </svg>
+                `;
+                
                 rankingHTML += `
                     <tr style="background-color: ${bgColor}; transition: all 0.2s ease;" ${hoverStyle}>
                         <td style="padding: ${rowPadding}; text-align: center; vertical-align: middle;">
@@ -1087,6 +1241,7 @@
                         </td>
                         <td style="padding: ${rowPadding}; color: #333; font-size: ${trendFontSize}; line-height: 1.5; vertical-align: middle;">${trendDisplay}</td>
                         <td style="padding: ${rowPadding}; text-align: right; font-weight: 700; font-size: ${tweetFontSize}; color: #667eea; vertical-align: middle;">${displayTweets}</td>
+                        <td style="padding: ${rowPadding}; vertical-align: middle;">${chartHTML}</td>
                     </tr>
                 `;
             });

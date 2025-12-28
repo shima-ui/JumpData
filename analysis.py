@@ -107,7 +107,10 @@ def analyze_word(display_name, query_string, interval_hour, span_hour, reference
 
     # 1時間集計の範囲
     df_one_hour_range = df_sum_calculation[df_sum_calculation['from_date'] < min_sum_duration_end_time].copy()
-    one_hour_sum_value = df_one_hour_range['count'].sum() if not df_one_hour_range.empty else 0
+    # 参照値を差し引いた1時間集計（負の値にならないようmax(0, ...)で処理）
+    one_hour_sum_value = df_one_hour_range.apply(
+        lambda row: max(0, row['count'] - reference_count), axis=1
+    ).sum() if not df_one_hour_range.empty else 0
     
     # 参照値を下回るまでの集計範囲（現行）
     if actual_sum_end_datetime:
@@ -115,7 +118,10 @@ def analyze_word(display_name, query_string, interval_hour, span_hour, reference
     else:
         df_sum_range = pd.DataFrame()
 
-    sum_value = df_sum_range['count'].sum() if not df_sum_range.empty else 0
+    # 参照値を差し引いた全体集計（負の値にならないようmax(0, ...)で処理）
+    sum_value = df_sum_range.apply(
+        lambda row: max(0, row['count'] - reference_count), axis=1
+    ).sum() if not df_sum_range.empty else 0
     
     # 1時間以降の集計範囲（1時間～参照値を下回るまで）
     if actual_sum_end_datetime and actual_sum_end_datetime > min_sum_duration_end_time:
